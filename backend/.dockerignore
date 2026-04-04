@@ -1,0 +1,6 @@
+tmp
+bin
+*.log
+.git
+.gitignore
+.vscode
