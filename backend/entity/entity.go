@@ -24,6 +24,53 @@ const (
 	KindShop   ItemKind = "shop"   // 店舗ショップ
 )
 
+// 焙煎度:検索条件
+type Roast string
+
+const (
+	RoastLight  Roast = "light"  //浅煎り
+	RoastMedium Roast = "Medium" //中煎り
+	RoastDark   Roast = "dark"   //深煎り
+)
+
+// 抽出方法や飲み方
+type Method string
+
+const (
+	MethodDrip     Method = "drip"
+	MethodEspresso Method = "espresso"
+	MethodMilk     Method = "milk"
+	MethodIced     Method = "iced"
+)
+
+// 今の気分を会話から抽出する
+type Mood string
+
+const (
+	MoodMorning Mood = "morning"
+	MoodWork    Mood = "work"
+	MoodRelax   Mood = "relax"
+	MoodNight   Mood = "night"
+)
+
+// 利用シーン
+type Scene string
+
+const (
+	ceneWork      Scene = "work"
+	ceneBreak     Scene = "break"
+	ceneAfterMeal Scene = "after_meal"
+	ceneRelax     Scene = "relax"
+)
+
+// 好みの温度
+type TempPref string
+
+const (
+	TempHot TempPref = "hot"
+	TempIce TempPref = "ice"
+)
+
 // Userはusersテーブル
 type User struct {
 	ID            int64     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
