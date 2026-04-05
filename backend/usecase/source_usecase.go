@@ -2,89 +2,132 @@ package usecase
 
 import (
 	"encoding/json"
-	"strings"
 
 	"coffee-spa/entity"
 	"coffee-spa/repository"
-
-	"gorm.io/datatypes"
 )
 
+// Sourceの作成・取得・一覧。
+type SourceUC interface {
+	Create(actor entity.Actor, in CreateSourceIn) (entity.Source, error)
+	Get(id uint) (entity.Source, error)
+	List(limit int, offset int) ([]entity.Source, error)
+}
+
+// Source作成入力。
+type CreateSourceIn struct {
+	Name    string
+	SiteURL string
+}
+
+// Source系の、validator。
 type SourceVal interface {
-	NewSource(input AddSourceIn) error
+	NewSource(in CreateSourceIn) error
+	Get(id uint) error
+	List(limit int, offset int) error
 }
 
-type SourceUC struct {
-	source repository.SourceRepository
-	audit  repository.AuditRepository
-	val    SourceVal
+type sourceUsecase struct {
+	sources repository.SourceRepository
+	audits  repository.AuditRepository
+	val     SourceVal
 }
 
-type sourceCreateMeta struct {
-	UserID   int64 `json:"user_id"`
-	SourceID int64 `json:"source_id"`
-}
-
-func NewSourceUC(
-	source repository.SourceRepository,
-	audit repository.AuditRepository,
+func NewSourceUsecase(
+	sources repository.SourceRepository,
+	audits repository.AuditRepository,
 	val SourceVal,
-) SourceUsecase {
-	return &SourceUC{
-		source: source,
-		audit:  audit,
-		val:    val,
+) SourceUC {
+	return &sourceUsecase{
+		sources: sources,
+		audits:  audits,
+		val:     val,
 	}
 }
 
-func (u *SourceUC) Add(actor Actor, sourceInput AddSourceIn) (entity.Source, error) {
-	if err := u.val.NewSource(sourceInput); err != nil {
-		return entity.Source{}, ErrInvalidRequest
+// Sourceを新規作成。
+// 管理操作。adminのみ許可する。
+func (u *sourceUsecase) Create(actor entity.Actor, in CreateSourceIn) (entity.Source, error) {
+	if actor.Role != entity.RoleAdmin {
+		return entity.Source{}, repository.ErrForbidden
 	}
 
-	normalized := normalizeSourceInput(sourceInput)
-
-	src, err := u.source.Create(entity.Source{
-		Name:    normalized.Name,
-		SiteURL: normalized.SiteURL,
-	})
-	if err != nil {
-		return entity.Source{}, mapRepoErr(err)
+	if err := u.val.NewSource(in); err != nil {
+		return entity.Source{}, err
 	}
 
-	metaBytes, err := json.Marshal(sourceCreateMeta{
-		UserID:   actor.UserID,
-		SourceID: src.ID,
-	})
-	if err != nil {
-		return entity.Source{}, ErrInternal
+	src := &entity.Source{
+		Name:    in.Name,
+		SiteURL: in.SiteURL,
 	}
 
-	auditErr := u.audit.Create(entity.AuditLog{
-		Type:     "admin.sources.create",
-		UserID:   int64Pointer(actor.UserID),
-		IP:       actor.IP,
-		UA:       actor.UA,
-		MetaJSON: datatypes.JSON(metaBytes),
-	})
-	if auditErr != nil {
-		return entity.Source{}, mapRepoErr(auditErr)
+	if err := u.sources.Create(src); err != nil {
+		return entity.Source{}, err
 	}
 
-	return src, nil
+	u.writeAudit(
+		"admin.sources.create",
+		&actor.UserID,
+		map[string]any{
+			"source_id": src.ID,
+			"name":      src.Name,
+		},
+	)
+
+	return *src, nil
 }
 
-func (u *SourceUC) List() ([]entity.Source, error) {
-	sources, err := u.source.List()
-	if err != nil {
-		return nil, mapRepoErr(err)
+// Sourceを1件取得する。
+func (u *sourceUsecase) Get(id uint) (entity.Source, error) {
+	if err := u.val.Get(id); err != nil {
+		return entity.Source{}, err
 	}
 
-	return sources, nil
+	src, err := u.sources.GetByID(id)
+	if err != nil {
+		return entity.Source{}, err
+	}
+
+	return *src, nil
 }
 
-func normalizeSourceInput(input AddSourceIn) AddSourceIn {
-	input.Name = strings.TrimSpace(input.Name)
-	input.SiteURL = trimNullableString(input.SiteURL)
-	return input
+// Source一覧を返す。
+func (u *sourceUsecase) List(limit int, offset int) ([]entity.Source, error) {
+	if err := u.val.List(limit, offset); err != nil {
+		return nil, err
+	}
+
+	out, err := u.sources.List(repository.SourceListQ{
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+// 監査ログ保存。
+func (u *sourceUsecase) writeAudit(
+	typ string,
+	userID *uint,
+	meta map[string]any,
+) {
+	if u.audits == nil {
+		return
+	}
+
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		raw = []byte(`{}`)
+	}
+
+	_ = u.audits.Create(&entity.AuditLog{
+		Type:   typ,
+		UserID: userID,
+		IP:     "",
+		UA:     "",
+		Meta:   raw,
+	})
 }
