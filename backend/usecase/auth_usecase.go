@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"coffee-spa/entity"
@@ -221,8 +222,8 @@ func (u *authUsecase) Signup(in SignupIn) (SignupOut, error) {
 		&user.ID,
 		"",
 		"",
-		map[string]any{
-			"user_id": user.ID,
+		map[string]string{
+			"user_id": uintToStr(user.ID),
 			"email":   user.Email,
 		},
 	)
@@ -234,8 +235,8 @@ func (u *authUsecase) Signup(in SignupIn) (SignupOut, error) {
 				&user.ID,
 				"",
 				"",
-				map[string]any{
-					"user_id": user.ID,
+				map[string]string{
+					"user_id": uintToStr(user.ID),
 					"email":   user.Email,
 				},
 			)
@@ -290,8 +291,8 @@ func (u *authUsecase) VerifyEmail(in VerifyEmailIn) error {
 		&user.ID,
 		"",
 		"",
-		map[string]any{
-			"user_id": user.ID,
+		map[string]string{
+			"user_id": uintToStr(user.ID),
 		},
 	)
 
@@ -318,8 +319,8 @@ func (u *authUsecase) Login(in LoginIn) (LoginOut, error) {
 			&user.ID,
 			in.IP,
 			in.UA,
-			map[string]any{
-				"user_id": user.ID,
+			map[string]string{
+				"user_id": uintToStr(user.ID),
 				"reason":  "password_mismatch",
 			},
 		)
@@ -359,8 +360,8 @@ func (u *authUsecase) Login(in LoginIn) (LoginOut, error) {
 		&user.ID,
 		in.IP,
 		in.UA,
-		map[string]any{
-			"user_id":   user.ID,
+		map[string]string{
+			"user_id":   uintToStr(user.ID),
 			"family_id": familyID,
 		},
 	)
@@ -408,8 +409,8 @@ func (u *authUsecase) Refresh(in RefreshIn) (RefreshOut, error) {
 				&user.ID,
 				in.IP,
 				in.UA,
-				map[string]any{
-					"user_id":   user.ID,
+				map[string]string{
+					"user_id":   uintToStr(user.ID),
 					"family_id": current.FamilyID,
 				},
 			)
@@ -460,8 +461,8 @@ func (u *authUsecase) Refresh(in RefreshIn) (RefreshOut, error) {
 		&user.ID,
 		in.IP,
 		in.UA,
-		map[string]any{
-			"user_id":   user.ID,
+		map[string]string{
+			"user_id":   uintToStr(user.ID),
 			"family_id": current.FamilyID,
 		},
 	)
@@ -504,8 +505,8 @@ func (u *authUsecase) Logout(actor entity.Actor, refreshToken string) error {
 		&actor.UserID,
 		"",
 		"",
-		map[string]any{
-			"user_id":   actor.UserID,
+		map[string]string{
+			"user_id":   uintToStr(actor.UserID),
 			"family_id": rt.FamilyID,
 		},
 	)
@@ -547,8 +548,8 @@ func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
 		&user.ID,
 		"",
 		"",
-		map[string]any{
-			"user_id": user.ID,
+		map[string]string{
+			"user_id": uintToStr(user.ID),
 			"email":   user.Email,
 		},
 	)
@@ -560,8 +561,8 @@ func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
 				&user.ID,
 				"",
 				"",
-				map[string]any{
-					"user_id": user.ID,
+				map[string]string{
+					"user_id": uintToStr(user.ID),
 					"email":   user.Email,
 				},
 			)
@@ -623,8 +624,8 @@ func (u *authUsecase) ResetPw(in ResetPwIn) error {
 		&user.ID,
 		"",
 		"",
-		map[string]any{
-			"user_id": user.ID,
+		map[string]string{
+			"user_id": uintToStr(user.ID),
 		},
 	)
 
@@ -647,7 +648,7 @@ func (u *authUsecase) writeAudit(
 	userID *uint,
 	ip string,
 	ua string,
-	meta map[string]any,
+	meta map[string]string,
 ) {
 	if u.audits == nil {
 		return
@@ -672,4 +673,7 @@ func (u *authUsecase) writeAudit(
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+func uintToStr(v uint) string {
+	return strconv.FormatUint(uint64(v), 10)
 }

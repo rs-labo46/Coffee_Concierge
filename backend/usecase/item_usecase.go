@@ -90,10 +90,10 @@ func (u *itemUsecase) Create(actor entity.Actor, in CreateItemIn) (entity.Item, 
 	u.writeAudit(
 		"admin.items.create",
 		&actor.UserID,
-		map[string]any{
-			"item_id":   item.ID,
-			"source_id": item.SourceID,
-			"kind":      item.Kind,
+		map[string]string{
+			"item_id":   uintToStr(item.ID),
+			"source_id": uintToStr(item.SourceID),
+			"kind":      string(item.Kind),
 			"title":     item.Title,
 		},
 	)
@@ -156,7 +156,7 @@ func (u *itemUsecase) Top(limit int) (entity.TopItems, error) {
 func (u *itemUsecase) writeAudit(
 	typ string,
 	userID *uint,
-	meta map[string]any,
+	meta map[string]string,
 ) {
 	if u.audits == nil {
 		return

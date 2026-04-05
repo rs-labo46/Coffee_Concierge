@@ -68,8 +68,8 @@ func (u *sourceUsecase) Create(actor entity.Actor, in CreateSourceIn) (entity.So
 	u.writeAudit(
 		"admin.sources.create",
 		&actor.UserID,
-		map[string]any{
-			"source_id": src.ID,
+		map[string]string{
+			"source_id": uintToStr(src.ID),
 			"name":      src.Name,
 		},
 	)
@@ -112,7 +112,7 @@ func (u *sourceUsecase) List(limit int, offset int) ([]entity.Source, error) {
 func (u *sourceUsecase) writeAudit(
 	typ string,
 	userID *uint,
-	meta map[string]any,
+	meta map[string]string,
 ) {
 	if u.audits == nil {
 		return

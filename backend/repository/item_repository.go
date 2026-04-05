@@ -183,17 +183,23 @@ func (r *itemRepository) SearchRelated(
 
 	// 検索語が1つもない場合は、公開中Itemをkindの優先順で返す。
 	if len(terms) > 0 {
-		// title / summary の OR 条件を積み上げる。
-		parts := make([]string, 0, len(terms))
-		args := make([]any, 0, len(terms)*2)
+		// 最初の検索語でベース条件を作る。
+		firstLike := "%" + terms[0] + "%"
+		tx = tx.Where(
+			"(title ILIKE ? OR summary ILIKE ?)",
+			firstLike,
+			firstLike,
+		)
 
-		for _, term := range terms {
+		// 2語目以降は OR 条件を順に追加する。
+		for _, term := range terms[1:] {
 			like := "%" + term + "%"
-			parts = append(parts, "(title ILIKE ? OR summary ILIKE ?)")
-			args = append(args, like, like)
+			tx = tx.Or(
+				"(title ILIKE ? OR summary ILIKE ?)",
+				like,
+				like,
+			)
 		}
-
-		tx = tx.Where(strings.Join(parts, " OR "), args...)
 	}
 
 	// kindの優先順をCASE式で表現する。

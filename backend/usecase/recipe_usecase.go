@@ -116,12 +116,12 @@ func (u *recipeUsecase) Create(actor entity.Actor, in CreateRecipeIn) (entity.Re
 	u.writeAudit(
 		"admin.recipes.create",
 		&actor.UserID,
-		map[string]any{
-			"recipe_id": recipe.ID,
-			"bean_id":   recipe.BeanID,
+		map[string]string{
+			"recipe_id": uintToStr(recipe.ID),
+			"bean_id":   uintToStr(recipe.BeanID),
 			"name":      recipe.Name,
-			"method":    recipe.Method,
-			"active":    recipe.Active,
+			"method":    string(recipe.Method),
+			"active":    boolToStr(recipe.Active),
 		},
 	)
 
@@ -166,12 +166,12 @@ func (u *recipeUsecase) Update(actor entity.Actor, in UpdateRecipeIn) (entity.Re
 	u.writeAudit(
 		"admin.recipes.update",
 		&actor.UserID,
-		map[string]any{
-			"recipe_id": recipe.ID,
-			"bean_id":   recipe.BeanID,
+		map[string]string{
+			"recipe_id": uintToStr(recipe.ID),
+			"bean_id":   uintToStr(recipe.BeanID),
 			"name":      recipe.Name,
-			"method":    recipe.Method,
-			"active":    recipe.Active,
+			"method":    string(recipe.Method),
+			"active":    boolToStr(recipe.Active),
 		},
 	)
 
@@ -216,7 +216,7 @@ func (u *recipeUsecase) List(in RecipeListIn) ([]entity.Recipe, error) {
 func (u *recipeUsecase) writeAudit(
 	typ string,
 	userID *uint,
-	meta map[string]any,
+	meta map[string]string,
 ) {
 	if u.audits == nil {
 		return

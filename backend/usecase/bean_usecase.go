@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"coffee-spa/entity"
 	"coffee-spa/repository"
@@ -112,11 +113,11 @@ func (u *beanUsecase) Create(actor entity.Actor, in CreateBeanIn) (entity.Bean, 
 	u.writeAudit(
 		"admin.beans.create",
 		&actor.UserID,
-		map[string]any{
-			"bean_id": bean.ID,
+		map[string]string{
+			"bean_id": uintToStr(bean.ID),
 			"name":    bean.Name,
-			"roast":   bean.Roast,
-			"active":  bean.Active,
+			"roast":   string(bean.Roast),
+			"active":  boolToStr(bean.Active),
 		},
 	)
 
@@ -158,11 +159,11 @@ func (u *beanUsecase) Update(actor entity.Actor, in UpdateBeanIn) (entity.Bean, 
 	u.writeAudit(
 		"admin.beans.update",
 		&actor.UserID,
-		map[string]any{
-			"bean_id": bean.ID,
+		map[string]string{
+			"bean_id": uintToStr(bean.ID),
 			"name":    bean.Name,
-			"roast":   bean.Roast,
-			"active":  bean.Active,
+			"roast":   string(bean.Roast),
+			"active":  boolToStr(bean.Active),
 		},
 	)
 
@@ -206,7 +207,7 @@ func (u *beanUsecase) List(in BeanListIn) ([]entity.Bean, error) {
 func (u *beanUsecase) writeAudit(
 	typ string,
 	userID *uint,
-	meta map[string]any,
+	meta map[string]string,
 ) {
 	if u.audits == nil {
 		return
@@ -224,4 +225,8 @@ func (u *beanUsecase) writeAudit(
 		UA:     "",
 		Meta:   raw,
 	})
+}
+
+func boolToStr(v bool) string {
+	return strconv.FormatBool(v)
 }
