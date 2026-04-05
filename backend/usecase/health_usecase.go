@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"coffee-spa/repository"
 	"context"
 	"database/sql"
 	"time"
@@ -9,9 +10,12 @@ import (
 type HealthUC struct {
 	db *sql.DB
 }
+type HealthUsecase interface {
+	Check() error
+}
 
 func NewHealthUC(db *sql.DB) HealthUsecase {
-	return &HealthUC{db: db}
+	return &HealthUC{db}
 }
 
 func (u *HealthUC) Check() error {
@@ -19,7 +23,7 @@ func (u *HealthUC) Check() error {
 	defer cancel()
 
 	if err := u.db.PingContext(ctx); err != nil {
-		return ErrInternal
+		return repository.ErrInternal
 	}
 
 	return nil
