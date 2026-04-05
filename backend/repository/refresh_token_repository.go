@@ -17,20 +17,20 @@ func NewRtRepository(db *gorm.DB) RtRepository {
 	return &rtRepository{db}
 }
 
-func (r *rtRepository) Create(rt entity.RefreshToken) (entity.RefreshToken, error) {
+func (r *rtRepository) Create(rt entity.Rt) (entity.Rt, error) {
 	err := r.db.Create(&rt).Error
 	if err != nil {
 		if isDup(err) || isFK(err) {
-			return entity.RefreshToken{}, ErrConflict
+			return entity.Rt{}, ErrConflict
 		}
-		return entity.RefreshToken{}, ErrInternal
+		return entity.Rt{}, ErrInternal
 	}
 
 	return rt, nil
 }
 
-func (r *rtRepository) GetByTokenHash(hash string) (entity.RefreshToken, error) {
-	var rt entity.RefreshToken
+func (r *rtRepository) GetByTokenHash(hash string) (entity.Rt, error) {
+	var rt entity.Rt
 
 	err := r.db.
 		Where("token_hash = ?", hash).
@@ -38,9 +38,9 @@ func (r *rtRepository) GetByTokenHash(hash string) (entity.RefreshToken, error) 
 		Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return entity.RefreshToken{}, ErrNotFound
+			return entity.Rt{}, ErrNotFound
 		}
-		return entity.RefreshToken{}, ErrInternal
+		return entity.Rt{}, ErrInternal
 	}
 
 	return rt, nil
@@ -50,7 +50,7 @@ func (r *rtRepository) Revoke(id int64) error {
 	now := time.Now()
 
 	res := r.db.
-		Model(&entity.RefreshToken{}).
+		Model(&entity.Rt{}).
 		Where("id = ? AND revoked_at IS NULL", id).
 		Update("revoked_at", now)
 
@@ -68,7 +68,7 @@ func (r *rtRepository) MarkUsed(id int64) error {
 	now := time.Now()
 
 	res := r.db.
-		Model(&entity.RefreshToken{}).
+		Model(&entity.Rt{}).
 		Where("id = ? AND used_at IS NULL", id).
 		Update("used_at", now)
 
@@ -84,7 +84,7 @@ func (r *rtRepository) MarkUsed(id int64) error {
 
 func (r *rtRepository) SetReplacedBy(id int64, newID int64) error {
 	res := r.db.
-		Model(&entity.RefreshToken{}).
+		Model(&entity.Rt{}).
 		Where("id = ?", id).
 		Update("replaced_by_id", newID)
 
@@ -105,7 +105,7 @@ func (r *rtRepository) RevokeByFamilyID(familyID string) error {
 	now := time.Now()
 
 	res := r.db.
-		Model(&entity.RefreshToken{}).
+		Model(&entity.Rt{}).
 		Where("family_id = ? AND revoked_at IS NULL", familyID).
 		Update("revoked_at", now)
 
@@ -120,7 +120,7 @@ func (r *rtRepository) RevokeAllByUser(userID int64) error {
 	now := time.Now()
 
 	res := r.db.
-		Model(&entity.RefreshToken{}).
+		Model(&entity.Rt{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
 		Update("revoked_at", now)
 

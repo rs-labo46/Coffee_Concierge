@@ -39,7 +39,7 @@ func TestAuthUCLogin_OK(t *testing.T) {
 		ev: &authEvRepoMock{},
 		pw: &authPwRepoMock{},
 		rt: &authRtRepoMock{
-			createFn: func(rt entity.RefreshToken) (entity.RefreshToken, error) {
+			createFn: func(rt entity.Rt) (entity.Rt, error) {
 				if rt.UserID != 3 {
 					t.Fatalf("user_id = %d, want 3", rt.UserID)
 				}
@@ -52,7 +52,7 @@ func TestAuthUCLogin_OK(t *testing.T) {
 				rt.ID = 10
 				return rt, nil
 			},
-			getByTokenHashFn:  func(hash string) (entity.RefreshToken, error) { return entity.RefreshToken{}, nil },
+			getByTokenHashFn:  func(hash string) (entity.Rt, error) { return entity.Rt{}, nil },
 			revokeFn:          func(id int64) error { return nil },
 			markUsedFn:        func(id int64) error { return nil },
 			setReplacedByFn:   func(id int64, newID int64) error { return nil },
@@ -109,7 +109,7 @@ func TestAuthUCLogin_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out.AccessToken != "access-1" || out.RefreshToken != "refresh-raw" || out.CsrfToken != "csrf-1" {
+	if out.AccessToken != "access-1" || out.Rt != "refresh-raw" || out.CsrfToken != "csrf-1" {
 		t.Fatalf("unexpected auth out: %+v", out)
 	}
 	if gotAuditType != "auth.login.success" {
@@ -136,13 +136,13 @@ func TestAuthUCRefresh_OK_Rotates(t *testing.T) {
 		ev: &authEvRepoMock{},
 		pw: &authPwRepoMock{},
 		rt: &authRtRepoMock{
-			createFn: func(rt entity.RefreshToken) (entity.RefreshToken, error) {
+			createFn: func(rt entity.Rt) (entity.Rt, error) {
 				calls = append(calls, "create")
 				rt.ID = 30
 				return rt, nil
 			},
-			getByTokenHashFn: func(hash string) (entity.RefreshToken, error) {
-				return entity.RefreshToken{
+			getByTokenHashFn: func(hash string) (entity.Rt, error) {
+				return entity.Rt{
 					ID:        20,
 					UserID:    8,
 					FamilyID:  "fam-1",
@@ -188,11 +188,11 @@ func TestAuthUCRefresh_OK_Rotates(t *testing.T) {
 		},
 	}
 
-	out, err := uc.Refresh(RefreshIn{RefreshToken: "refresh-1", IP: "127.0.0.1", UA: "test"})
+	out, err := uc.Refresh(RefreshIn{Rt: "refresh-1", IP: "127.0.0.1", UA: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if out.AccessToken != "access-2" || out.RefreshToken != "refresh-2" || out.CsrfToken != "csrf-2" {
+	if out.AccessToken != "access-2" || out.Rt != "refresh-2" || out.CsrfToken != "csrf-2" {
 		t.Fatalf("unexpected refresh out: %+v", out)
 	}
 
@@ -225,9 +225,9 @@ func TestAuthUCRefresh_UsedToken_DetectsReuse(t *testing.T) {
 		ev: &authEvRepoMock{},
 		pw: &authPwRepoMock{},
 		rt: &authRtRepoMock{
-			createFn: func(rt entity.RefreshToken) (entity.RefreshToken, error) { return entity.RefreshToken{}, nil },
-			getByTokenHashFn: func(hash string) (entity.RefreshToken, error) {
-				return entity.RefreshToken{
+			createFn: func(rt entity.Rt) (entity.Rt, error) { return entity.Rt{}, nil },
+			getByTokenHashFn: func(hash string) (entity.Rt, error) {
+				return entity.Rt{
 					ID:        100,
 					UserID:    55,
 					FamilyID:  "family-reuse",
@@ -260,7 +260,7 @@ func TestAuthUCRefresh_UsedToken_DetectsReuse(t *testing.T) {
 		},
 	}
 
-	_, err := uc.Refresh(RefreshIn{RefreshToken: "raw-old", IP: "127.0.0.1", UA: "test"})
+	_, err := uc.Refresh(RefreshIn{Rt: "raw-old", IP: "127.0.0.1", UA: "test"})
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
@@ -294,12 +294,12 @@ func TestAuthUCLogout_OK(t *testing.T) {
 		ev: &authEvRepoMock{},
 		pw: &authPwRepoMock{},
 		rt: &authRtRepoMock{
-			createFn: func(rt entity.RefreshToken) (entity.RefreshToken, error) { return entity.RefreshToken{}, nil },
-			getByTokenHashFn: func(hash string) (entity.RefreshToken, error) {
+			createFn: func(rt entity.Rt) (entity.Rt, error) { return entity.Rt{}, nil },
+			getByTokenHashFn: func(hash string) (entity.Rt, error) {
 				if hash != sha256Hex("refresh-on-logout") {
 					t.Fatalf("unexpected token hash: %q", hash)
 				}
-				return entity.RefreshToken{FamilyID: "logout-family"}, nil
+				return entity.Rt{FamilyID: "logout-family"}, nil
 			},
 			revokeFn:        func(id int64) error { return nil },
 			markUsedFn:      func(id int64) error { return nil },
@@ -323,7 +323,7 @@ func TestAuthUCLogout_OK(t *testing.T) {
 		rl:   &rateLimMock{},
 	}
 
-	err := uc.Logout(LogoutIn{UserID: 9, RefreshToken: "refresh-on-logout", IP: "127.0.0.1", UA: "test"})
+	err := uc.Logout(LogoutIn{UserID: 9, Rt: "refresh-on-logout", IP: "127.0.0.1", UA: "test"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -355,12 +355,12 @@ func TestAuthUCRefresh_MarkUsedConflict_BecomesUnauthorized(t *testing.T) {
 		ev: &authEvRepoMock{},
 		pw: &authPwRepoMock{},
 		rt: &authRtRepoMock{
-			createFn: func(rt entity.RefreshToken) (entity.RefreshToken, error) {
+			createFn: func(rt entity.Rt) (entity.Rt, error) {
 				rt.ID = 30
 				return rt, nil
 			},
-			getByTokenHashFn: func(hash string) (entity.RefreshToken, error) {
-				return entity.RefreshToken{
+			getByTokenHashFn: func(hash string) (entity.Rt, error) {
+				return entity.Rt{
 					ID:        20,
 					UserID:    8,
 					FamilyID:  "fam-1",
@@ -394,7 +394,7 @@ func TestAuthUCRefresh_MarkUsedConflict_BecomesUnauthorized(t *testing.T) {
 		},
 	}
 
-	_, err := uc.Refresh(RefreshIn{RefreshToken: "refresh-1", IP: "127.0.0.1", UA: "test"})
+	_, err := uc.Refresh(RefreshIn{Rt: "refresh-1", IP: "127.0.0.1", UA: "test"})
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}

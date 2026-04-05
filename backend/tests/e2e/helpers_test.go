@@ -136,11 +136,11 @@ type topItemsRes struct {
 
 // login / refresh 後に必要な認証情報をまとめる。
 type authState struct {
-	AccessToken  string
-	RefreshToken string
-	CSRFToken    string
-	UserID       int64
-	Role         string
+	AccessToken string
+	Rt          string
+	CSRFToken   string
+	UserID      int64
+	Role        string
 }
 
 // E2E共通の接続先やDBをまとめる。
@@ -500,11 +500,11 @@ func (e *testEnv) loginOK(t *testing.T, email string, pw string) authState {
 	csrfCookie := mustCookie(t, res, "csrf_token")
 
 	return authState{
-		AccessToken:  out.AccessToken,
-		RefreshToken: refreshCookie.Value,
-		CSRFToken:    csrfCookie.Value,
-		UserID:       out.User.ID,
-		Role:         out.User.Role,
+		AccessToken: out.AccessToken,
+		Rt:          refreshCookie.Value,
+		CSRFToken:   csrfCookie.Value,
+		UserID:      out.User.ID,
+		Role:        out.User.Role,
 	}
 }
 
@@ -523,7 +523,7 @@ func authCookies(st authState) []*http.Cookie {
 	return []*http.Cookie{
 		{
 			Name:  "refresh_token",
-			Value: st.RefreshToken,
+			Value: st.Rt,
 			Path:  "/auth",
 		},
 		{
@@ -588,11 +588,11 @@ func mustNoStore(t *testing.T, res *http.Response) {
 }
 
 // revoke 済みの数確認用。
-func (e *testEnv) countRevokedRefreshTokensByUser(t *testing.T, userID int64) int64 {
+func (e *testEnv) countRevokedRtsByUser(t *testing.T, userID int64) int64 {
 	t.Helper()
 
 	var n int64
-	if err := e.DB.Model(&entity.RefreshToken{}).
+	if err := e.DB.Model(&entity.Rt{}).
 		Where("user_id = ? AND revoked_at IS NOT NULL", userID).
 		Count(&n).Error; err != nil {
 		t.Fatalf("count revoked refresh tokens error: %v", err)

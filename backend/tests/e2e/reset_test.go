@@ -13,7 +13,7 @@ func Test_Auth_Forgot_Reset_LoginWithNewPassword(t *testing.T) {
 
 	// reset 前に login して refresh token を発行しておく
 	oldSt := env.loginOK(t, u.Email, testUserPW)
-	if oldSt.RefreshToken == "" {
+	if oldSt.Rt == "" {
 		t.Fatalf("expected refresh token before password reset")
 	}
 
@@ -39,7 +39,7 @@ func Test_Auth_Forgot_Reset_LoginWithNewPassword(t *testing.T) {
 	mustStatus(t, res, body, http.StatusNoContent)
 
 	// reset 実行時に旧 refresh が revoke されていること
-	revoked := env.countRevokedRefreshTokensByUser(t, u.ID)
+	revoked := env.countRevokedRtsByUser(t, u.ID)
 	if revoked == 0 {
 		t.Fatalf("expected revoked refresh tokens after password reset")
 	}
@@ -63,7 +63,7 @@ func Test_Auth_Forgot_Reset_LoginWithNewPassword(t *testing.T) {
 		http.MethodPost,
 		"/auth/refresh",
 		addCSRFHeader(nil, oldSt.CSRFToken),
-		&http.Cookie{Name: "refresh_token", Value: oldSt.RefreshToken, Path: "/auth"},
+		&http.Cookie{Name: "refresh_token", Value: oldSt.Rt, Path: "/auth"},
 		&http.Cookie{Name: "csrf_token", Value: oldSt.CSRFToken, Path: "/"},
 	)
 	mustStatus(t, res, body, http.StatusUnauthorized)

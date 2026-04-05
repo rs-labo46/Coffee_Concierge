@@ -48,16 +48,16 @@ type LoginIn struct {
 }
 
 type RefreshIn struct {
-	RefreshToken string
-	IP           string
-	UA           string
+	Rt string
+	IP string
+	UA string
 }
 
 type LogoutIn struct {
-	UserID       int64
-	RefreshToken string
-	IP           string
-	UA           string
+	UserID int64
+	Rt     string
+	IP     string
+	UA     string
 }
 
 type ForgotPwIn struct {
@@ -86,10 +86,10 @@ type ResendVerifyIn struct {
 }
 
 type AuthOut struct {
-	AccessToken  string
-	RefreshToken string
-	CsrfToken    string
-	User         entity.User
+	AccessToken string
+	Rt          string
+	CsrfToken   string
+	User        entity.User
 }
 
 type AddItemIn struct {

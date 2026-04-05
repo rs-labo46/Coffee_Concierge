@@ -13,7 +13,7 @@ func Test_Auth_Refresh_Rotation_And_ReuseRejected(t *testing.T) {
 
 	st1 := env.loginOK(t, u.Email, testUserPW)
 
-	oldRefresh := st1.RefreshToken
+	oldRefresh := st1.Rt
 	oldCSRF := st1.CSRFToken
 
 	// 1回目 refresh 成功
@@ -74,7 +74,7 @@ func Test_Auth_Logout_Then_Me_IsUnauthorized(t *testing.T) {
 		http.MethodPost,
 		"/auth/logout",
 		bearerHeader(st.AccessToken),
-		&http.Cookie{Name: "refresh_token", Value: st.RefreshToken, Path: "/auth"},
+		&http.Cookie{Name: "refresh_token", Value: st.Rt, Path: "/auth"},
 	)
 	mustStatus(t, res, body, http.StatusNoContent)
 

@@ -88,8 +88,8 @@ func (m *authPwRepoMock) RevokeUnusedByUser(userID int64) error {
 
 // refresh token repositoryモック。
 type authRtRepoMock struct {
-	createFn          func(rt entity.RefreshToken) (entity.RefreshToken, error)
-	getByTokenHashFn  func(hash string) (entity.RefreshToken, error)
+	createFn          func(rt entity.Rt) (entity.Rt, error)
+	getByTokenHashFn  func(hash string) (entity.Rt, error)
 	revokeFn          func(id int64) error
 	markUsedFn        func(id int64) error
 	setReplacedByFn   func(id int64, newID int64) error
@@ -97,11 +97,11 @@ type authRtRepoMock struct {
 	revokeAllByUserFn func(userID int64) error
 }
 
-func (m *authRtRepoMock) Create(rt entity.RefreshToken) (entity.RefreshToken, error) {
+func (m *authRtRepoMock) Create(rt entity.Rt) (entity.Rt, error) {
 	return m.createFn(rt)
 }
 
-func (m *authRtRepoMock) GetByTokenHash(hash string) (entity.RefreshToken, error) {
+func (m *authRtRepoMock) GetByTokenHash(hash string) (entity.Rt, error) {
 	return m.getByTokenHashFn(hash)
 }
 

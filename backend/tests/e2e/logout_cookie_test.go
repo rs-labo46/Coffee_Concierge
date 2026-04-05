@@ -18,7 +18,7 @@ func Test_Auth_Logout_ClearsRefreshAndCSRFCookies(t *testing.T) {
 		http.MethodPost,
 		"/auth/logout",
 		bearerHeader(st.AccessToken),
-		&http.Cookie{Name: "refresh_token", Value: st.RefreshToken, Path: "/auth"},
+		&http.Cookie{Name: "refresh_token", Value: st.Rt, Path: "/auth"},
 	)
 	mustStatus(t, res, body, http.StatusNoContent)
 

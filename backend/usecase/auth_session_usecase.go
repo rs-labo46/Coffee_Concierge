@@ -49,7 +49,7 @@ func (u *AuthUC) Login(input LoginIn) (AuthOut, error) {
 		return AuthOut{}, ErrInternal
 	}
 
-	_, err = u.rt.Create(entity.RefreshToken{
+	_, err = u.rt.Create(entity.Rt{
 		UserID:    user.ID,
 		FamilyID:  familyID,
 		TokenHash: sha256Hex(rawRefresh),
@@ -83,21 +83,21 @@ func (u *AuthUC) Login(input LoginIn) (AuthOut, error) {
 	}
 
 	return AuthOut{
-		AccessToken:  access,
-		RefreshToken: rawRefresh,
-		CsrfToken:    csrf,
-		User:         user,
+		AccessToken: access,
+		Rt:          rawRefresh,
+		CsrfToken:   csrf,
+		User:        user,
 	}, nil
 }
 
 // refresh tokenをローリングさせる
 func (u *AuthUC) Refresh(input RefreshIn) (AuthOut, error) {
-	if strings.TrimSpace(input.RefreshToken) == "" {
+	if strings.TrimSpace(input.Rt) == "" {
 		_ = u.writeAudit("auth.refresh.fail", nil, input.IP, input.UA, nil)
 		return AuthOut{}, ErrUnauthorized
 	}
 
-	rt, err := u.rt.GetByTokenHash(sha256Hex(input.RefreshToken))
+	rt, err := u.rt.GetByTokenHash(sha256Hex(input.Rt))
 	if err != nil {
 		_ = u.writeAudit("auth.refresh.fail", nil, input.IP, input.UA, nil)
 		return AuthOut{}, ErrUnauthorized
@@ -130,7 +130,7 @@ func (u *AuthUC) Refresh(input RefreshIn) (AuthOut, error) {
 		return AuthOut{}, ErrInternal
 	}
 
-	newRT, err := u.rt.Create(entity.RefreshToken{
+	newRT, err := u.rt.Create(entity.Rt{
 		UserID:    rt.UserID,
 		FamilyID:  rt.FamilyID,
 		TokenHash: sha256Hex(rawRefresh),
@@ -185,10 +185,10 @@ func (u *AuthUC) Refresh(input RefreshIn) (AuthOut, error) {
 	}
 
 	return AuthOut{
-		AccessToken:  access,
-		RefreshToken: rawRefresh,
-		CsrfToken:    csrf,
-		User:         user,
+		AccessToken: access,
+		Rt:          rawRefresh,
+		CsrfToken:   csrf,
+		User:        user,
 	}, nil
 }
 
@@ -199,8 +199,8 @@ func (u *AuthUC) Logout(in LogoutIn) error {
 		return mapRepoErr(err)
 	}
 
-	if in.RefreshToken != "" {
-		rt, err := u.rt.GetByTokenHash(sha256Hex(in.RefreshToken))
+	if in.Rt != "" {
+		rt, err := u.rt.GetByTokenHash(sha256Hex(in.Rt))
 		if err == nil {
 			if err := u.rt.RevokeByFamilyID(rt.FamilyID); err != nil {
 				return mapRepoErr(err)
@@ -232,7 +232,7 @@ func (u *AuthUC) writeLoginUnauthorized(userID *int64, input LoginIn) error {
 	return ErrUnauthorized
 }
 
-func (u *AuthUC) handleRefreshReuse(rt entity.RefreshToken, input RefreshIn) error {
+func (u *AuthUC) handleRefreshReuse(rt entity.Rt, input RefreshIn) error {
 	_ = u.rt.RevokeByFamilyID(rt.FamilyID)
 	_, _ = u.user.BumpTokenVer(rt.UserID)
 

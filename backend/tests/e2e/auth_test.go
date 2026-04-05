@@ -58,7 +58,7 @@ func Test_Auth_Signup_Verify_Login_Me(t *testing.T) {
 	if st.AccessToken == "" {
 		t.Fatalf("access token is empty")
 	}
-	if st.RefreshToken == "" {
+	if st.Rt == "" {
 		t.Fatalf("refresh token cookie is empty")
 	}
 	if st.CSRFToken == "" {

@@ -18,7 +18,7 @@ func Test_Auth_Refresh_CSRFMismatch_ReturnsForbidden(t *testing.T) {
 			http.MethodPost,
 			"/auth/refresh",
 			addCSRFHeader(nil, st.CSRFToken),
-			&http.Cookie{Name: "refresh_token", Value: st.RefreshToken, Path: "/auth"},
+			&http.Cookie{Name: "refresh_token", Value: st.Rt, Path: "/auth"},
 		)
 		mustStatus(t, res, body, http.StatusForbidden)
 		mustErrCode(t, body, "forbidden")

@@ -158,7 +158,7 @@ func (ctl AuthCtl) Login(c echo.Context) error {
 		return writeErr(c, err)
 	}
 
-	setRefreshCookie(c, loginResult.RefreshToken)
+	setRefreshCookie(c, loginResult.Rt)
 	setCSRFCookie(c, loginResult.CsrfToken)
 
 	return c.JSON(http.StatusOK, AuthRes{
@@ -170,15 +170,15 @@ func (ctl AuthCtl) Login(c echo.Context) error {
 // POST /auth/refreshを処理。
 func (ctl AuthCtl) Refresh(c echo.Context) error {
 	refreshResult, err := ctl.uc.Refresh(usecase.RefreshIn{
-		RefreshToken: refreshCookie(c),
-		IP:           realIP(c),
-		UA:           userAgent(c),
+		Rt: refreshCookie(c),
+		IP: realIP(c),
+		UA: userAgent(c),
 	})
 	if err != nil {
 		return writeErr(c, err)
 	}
 
-	setRefreshCookie(c, refreshResult.RefreshToken)
+	setRefreshCookie(c, refreshResult.Rt)
 	setCSRFCookie(c, refreshResult.CsrfToken)
 
 	return c.JSON(http.StatusOK, AuthRes{
@@ -190,10 +190,10 @@ func (ctl AuthCtl) Refresh(c echo.Context) error {
 // POST /auth/logoutを処理。
 func (ctl AuthCtl) Logout(c echo.Context) error {
 	err := ctl.uc.Logout(usecase.LogoutIn{
-		UserID:       userIDFromCtx(c),
-		RefreshToken: refreshCookie(c),
-		IP:           realIP(c),
-		UA:           userAgent(c),
+		UserID: userIDFromCtx(c),
+		Rt:     refreshCookie(c),
+		IP:     realIP(c),
+		UA:     userAgent(c),
 	})
 	if err != nil {
 		return writeErr(c, err)

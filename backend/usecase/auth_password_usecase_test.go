@@ -93,8 +93,8 @@ func TestAuthUCResetPw_OK_BumpsAndRevokesAll(t *testing.T) {
 			revokeUnusedByUser: func(userID int64) error { return nil },
 		},
 		rt: &authRtRepoMock{
-			createFn:         func(rt entity.RefreshToken) (entity.RefreshToken, error) { return entity.RefreshToken{}, nil },
-			getByTokenHashFn: func(hash string) (entity.RefreshToken, error) { return entity.RefreshToken{}, nil },
+			createFn:         func(rt entity.Rt) (entity.Rt, error) { return entity.Rt{}, nil },
+			getByTokenHashFn: func(hash string) (entity.Rt, error) { return entity.Rt{}, nil },
 			revokeFn:         func(id int64) error { return nil },
 			markUsedFn:       func(id int64) error { return nil },
 			setReplacedByFn:  func(id int64, newID int64) error { return nil },
