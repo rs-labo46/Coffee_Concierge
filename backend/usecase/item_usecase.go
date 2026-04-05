@@ -2,174 +2,176 @@ package usecase
 
 import (
 	"encoding/json"
-	"errors"
-	"strings"
 	"time"
 
 	"coffee-spa/entity"
 	"coffee-spa/repository"
-
-	"gorm.io/datatypes"
 )
 
+// Itemの作成・取得・一覧・Topを扱う。
+type ItemUC interface {
+	Create(actor entity.Actor, in CreateItemIn) (entity.Item, error)
+	Get(id uint) (entity.Item, error)
+	List(q string, kind entity.ItemKind, limit int, offset int) ([]entity.Item, error)
+	Top(limit int) (entity.TopItems, error)
+}
+
+// Item作成入力。
+type CreateItemIn struct {
+	Title       string
+	Summary     string
+	URL         string
+	ImageURL    string
+	Kind        entity.ItemKind
+	SourceID    uint
+	PublishedAt time.Time
+}
+
+// Item 系のvalidator。
 type ItemVal interface {
-	NewItem(input AddItemIn) error
-	ListItem(q ItemQ) error
+	NewItem(in CreateItemIn) error
+	Get(id uint) error
+	List(q string, kind entity.ItemKind, limit int, offset int) error
+	Top(limit int) error
 }
 
-type ItemUC struct {
-	item  repository.ItemRepository
-	audit repository.AuditRepository
-	val   ItemVal
+type itemUsecase struct {
+	items   repository.ItemRepository
+	sources repository.SourceRepository
+	audits  repository.AuditRepository
+	val     ItemVal
 }
 
-type itemCreateMeta struct {
-	UserID int64 `json:"user_id"`
-	ItemID int64 `json:"item_id"`
-}
-
-func NewItemUC(
-	item repository.ItemRepository,
-	audit repository.AuditRepository,
+func NewItemUsecase(
+	items repository.ItemRepository,
+	sources repository.SourceRepository,
+	audits repository.AuditRepository,
 	val ItemVal,
-) ItemUsecase {
-	return &ItemUC{
-		item:  item,
-		audit: audit,
-		val:   val,
+) ItemUC {
+	return &itemUsecase{
+		items:   items,
+		sources: sources,
+		audits:  audits,
+		val:     val,
 	}
 }
 
-func (u *ItemUC) Add(actor Actor, input AddItemIn) (entity.Item, error) {
-	if err := u.val.NewItem(input); err != nil {
-		return entity.Item{}, ErrInvalidRequest
+// Itemを新規作成する。
+// adminのみ許可。
+// source_idの存在確認を先に行う。
+func (u *itemUsecase) Create(actor entity.Actor, in CreateItemIn) (entity.Item, error) {
+	if actor.Role != entity.RoleAdmin {
+		return entity.Item{}, repository.ErrForbidden
 	}
 
-	normalized := normalizeItemInput(input)
+	if err := u.val.NewItem(in); err != nil {
+		return entity.Item{}, err
+	}
 
-	publishedAt, err := time.Parse(time.RFC3339, normalized.PublishedAt)
+	// sourceの存在確認を先に行う。
+	if _, err := u.sources.GetByID(in.SourceID); err != nil {
+		return entity.Item{}, err
+	}
+
+	item := &entity.Item{
+		Title:       in.Title,
+		Summary:     in.Summary,
+		URL:         in.URL,
+		ImageURL:    in.ImageURL,
+		Kind:        in.Kind,
+		SourceID:    in.SourceID,
+		PublishedAt: in.PublishedAt,
+	}
+
+	if err := u.items.Create(item); err != nil {
+		return entity.Item{}, err
+	}
+
+	u.writeAudit(
+		"admin.items.create",
+		&actor.UserID,
+		map[string]any{
+			"item_id":   item.ID,
+			"source_id": item.SourceID,
+			"kind":      item.Kind,
+			"title":     item.Title,
+		},
+	)
+
+	return *item, nil
+}
+
+// Itemを1件取得する。
+func (u *itemUsecase) Get(id uint) (entity.Item, error) {
+	if err := u.val.Get(id); err != nil {
+		return entity.Item{}, err
+	}
+
+	item, err := u.items.GetByID(id)
 	if err != nil {
-		return entity.Item{}, ErrInvalidRequest
+		return entity.Item{}, err
 	}
 
-	item, err := u.item.Create(entity.Item{
-		Title:       normalized.Title,
-		Summary:     normalized.Summary,
-		Body:        normalized.Body,
-		URL:         normalized.URL,
-		ImageURL:    normalized.ImageURL,
-		Kind:        normalized.Kind,
-		SourceID:    normalized.SourceID,
-		PublishedAt: publishedAt,
+	return *item, nil
+}
+
+// Item一覧を返す。
+func (u *itemUsecase) List(
+	q string,
+	kind entity.ItemKind,
+	limit int,
+	offset int,
+) ([]entity.Item, error) {
+	if err := u.val.List(q, kind, limit, offset); err != nil {
+		return nil, err
+	}
+
+	out, err := u.items.List(repository.ItemListQ{
+		Q:      q,
+		Kind:   kind,
+		Limit:  limit,
+		Offset: offset,
 	})
 	if err != nil {
-		return entity.Item{}, mapRepoErr(err)
+		return nil, err
 	}
 
-	b, err := json.Marshal(itemCreateMeta{
-		UserID: actor.UserID,
-		ItemID: item.ID,
+	return out, nil
+}
+
+// Top表示用のカテゴリ別アイテム
+func (u *itemUsecase) Top(limit int) (entity.TopItems, error) {
+	if err := u.val.Top(limit); err != nil {
+		return entity.TopItems{}, err
+	}
+
+	top, err := u.items.Top(limit)
+	if err != nil {
+		return entity.TopItems{}, err
+	}
+
+	return *top, nil
+}
+
+func (u *itemUsecase) writeAudit(
+	typ string,
+	userID *uint,
+	meta map[string]any,
+) {
+	if u.audits == nil {
+		return
+	}
+
+	raw, err := json.Marshal(meta)
+	if err != nil {
+		raw = []byte(`{}`)
+	}
+
+	_ = u.audits.Create(&entity.AuditLog{
+		Type:   typ,
+		UserID: userID,
+		IP:     "",
+		UA:     "",
+		Meta:   raw,
 	})
-	if err != nil {
-		return entity.Item{}, ErrInternal
-	}
-
-	err = u.audit.Create(entity.AuditLog{
-		Type:     "admin.items.create",
-		UserID:   int64Pointer(actor.UserID),
-		IP:       actor.IP,
-		UA:       actor.UA,
-		MetaJSON: datatypes.JSON(b),
-	})
-	if err != nil {
-		return entity.Item{}, mapRepoErr(err)
-	}
-
-	return item, nil
-}
-
-func (u *ItemUC) Get(id int64) (entity.Item, error) {
-	if id <= 0 {
-		return entity.Item{}, ErrInvalidRequest
-	}
-
-	item, err := u.item.GetByID(id)
-	if err != nil {
-		return entity.Item{}, mapRepoErr(err)
-	}
-
-	return item, nil
-}
-
-func (u *ItemUC) Search(q ItemQ) ([]entity.Item, error) {
-	if err := u.val.ListItem(q); err != nil {
-		return nil, ErrInvalidRequest
-	}
-
-	q.Q = strings.TrimSpace(q.Q)
-	q.Kind = strings.TrimSpace(q.Kind)
-
-	items, err := u.item.List(q)
-	if err != nil {
-		return nil, mapRepoErr(err)
-	}
-
-	return items, nil
-}
-
-func (u *ItemUC) Top(limit int) (TopItems, error) {
-	if limit < 0 {
-		return TopItems{}, ErrInvalidRequest
-	}
-
-	topItems, err := u.item.Top(limit)
-	if err != nil {
-		return TopItems{}, mapRepoErr(err)
-	}
-
-	return topItems, nil
-}
-
-func normalizeItemInput(input AddItemIn) AddItemIn {
-	input.Title = strings.TrimSpace(input.Title)
-	input.Kind = strings.TrimSpace(input.Kind)
-	input.PublishedAt = strings.TrimSpace(input.PublishedAt)
-	input.Summary = trimNullableString(input.Summary)
-	input.Body = trimNullableString(input.Body)
-	input.URL = trimNullableString(input.URL)
-	input.ImageURL = trimNullableString(input.ImageURL)
-	return input
-}
-
-func trimNullableString(value *string) *string {
-	if value == nil {
-		return nil
-	}
-
-	trimmed := strings.TrimSpace(*value)
-	if trimmed == "" {
-		return nil
-	}
-
-	return &trimmed
-}
-
-func mapRepoErr(err error) error {
-	switch {
-	case errors.Is(err, repository.ErrNotFound):
-		return ErrNotFound
-	case errors.Is(err, repository.ErrConflict):
-		return ErrConflict
-	case errors.Is(err, repository.ErrInternal):
-		return ErrInternal
-	default:
-		return ErrInternal
-	}
-}
-
-func int64Pointer(id int64) *int64 {
-	if id == 0 {
-		return nil
-	}
-	return &id
 }
