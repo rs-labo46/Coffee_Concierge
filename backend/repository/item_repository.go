@@ -1,9 +1,10 @@
 package repository
 
 import (
-	"errors"
-
 	"coffee-spa/entity"
+	"errors"
+	"strings"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -16,121 +17,233 @@ func NewItemRepository(db *gorm.DB) ItemRepository {
 	return &itemRepository{db}
 }
 
-func (r *itemRepository) Create(i entity.Item) (entity.Item, error) {
-	err := r.db.Create(&i).Error
+func (r *itemRepository) Create(item *entity.Item) error {
+	if item == nil {
+		return ErrInvalidState
+	}
+
+	// INSERTを実行する。
+	err := r.db.Create(item).Error
 	if err != nil {
 		if isDup(err) || isFK(err) {
-			return entity.Item{}, ErrConflict
+			return ErrConflict
 		}
-		return entity.Item{}, ErrInternal
+		return ErrInternal
 	}
 
-	return i, nil
+	return nil
 }
 
-func (r *itemRepository) GetByID(id int64) (entity.Item, error) {
+// 公開/非公開を問わずIDで1件取得
+func (r *itemRepository) GetByID(id uint) (*entity.Item, error) {
+	if id == 0 {
+		return nil, ErrNotFound
+	}
 	var item entity.Item
 
-	err := r.db.
-		Preload("Source").
-		First(&item, id).
-		Error
+	err := r.db.Preload("Source").First(&item, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return entity.Item{}, ErrNotFound
-		}
-		return entity.Item{}, ErrInternal
-	}
+			return nil, ErrNotFound
 
-	return item, nil
+		}
+
+		return nil, ErrInternal
+	}
+	return &item, nil
 }
 
-func (r *itemRepository) List(q ItemQ) ([]entity.Item, error) {
-	var xs []entity.Item
+func (r *itemRepository) List(q ItemListQ) ([]entity.Item, error) {
+	var items []entity.Item
 
-	tx := r.db.Model(&entity.Item{})
-
+	//公開中のアイテムクエリ
+	tx := r.db.Model(&entity.Item{}).Preload("Source").Where("published_at <= ?", time.Now())
+	//kindの指定がある場合
 	if q.Kind != "" {
 		tx = tx.Where("kind = ?", q.Kind)
 	}
-
+	// qの指定がある場合の部分検索
 	if q.Q != "" {
 		like := "%" + q.Q + "%"
 		tx = tx.Where(
-			"title ILIKE ? OR COALESCE(summary, '') ILIKE ? OR COALESCE(body, '') ILIKE ?",
-			like,
+			"title ILIKE ? OR summary ILIKE ?",
 			like,
 			like,
 		)
 	}
-
-	lim := q.Limit
-	if lim <= 0 {
-		lim = 20
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 20
 	}
-	if lim > 50 {
-		lim = 50
-	}
-
-	off := q.Offset
-	if off < 0 {
-		off = 0
+	if limit > 50 {
+		limit = 50
 	}
 
+	offset := q.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	// 公開日時が新しい順で返す。
 	err := tx.
 		Order("published_at DESC").
 		Order("created_at DESC").
-		Limit(lim).
-		Offset(off).
-		Find(&xs).
+		Limit(limit).
+		Offset(offset).
+		Find(&items).
 		Error
 	if err != nil {
 		return nil, ErrInternal
 	}
 
-	return xs, nil
+	return items, nil
+
 }
 
-func (r *itemRepository) Top(cap int) (TopItems, error) {
-	if cap < 0 {
-		cap = 0
+func (r *itemRepository) Top(limit int) (*entity.TopItems, error) {
+	if limit <= 0 {
+		limit = 3
 	}
-	if cap > 50 {
-		cap = 50
+	if limit > 50 {
+		limit = 50
 	}
 
-	topItems := TopItems{
+	// 戻り値を初期化する。
+	top := &entity.TopItems{
 		News:   []entity.Item{},
 		Recipe: []entity.Item{},
 		Deal:   []entity.Item{},
 		Shop:   []entity.Item{},
 	}
 
-	if cap == 0 {
-		return topItems, nil
-	}
-
-	groups := []struct {
-		kind string
+	// kindごとに同じ条件で取得する。
+	queries := []struct {
+		kind entity.ItemKind
 		dst  *[]entity.Item
 	}{
-		{kind: "news", dst: &topItems.News},
-		{kind: "recipe", dst: &topItems.Recipe},
-		{kind: "deal", dst: &topItems.Deal},
-		{kind: "shop", dst: &topItems.Shop},
+		{kind: entity.ItemKindNews, dst: &top.News},
+		{kind: entity.ItemKindRecipe, dst: &top.Recipe},
+		{kind: entity.ItemKindDeal, dst: &top.Deal},
+		{kind: entity.ItemKindShop, dst: &top.Shop},
 	}
 
-	for _, g := range groups {
-		if err := r.db.
-			Where("kind = ?", g.kind).
+	// 各カテゴリを順番に取得する。
+	for _, q := range queries {
+		err := r.db.Model(&entity.Item{}).
+			Preload("Source").
+			Where("kind = ?", q.kind).
+			Where("published_at <= ?", time.Now()).
 			Order("published_at DESC").
 			Order("created_at DESC").
-			Limit(cap).
-			Find(g.dst).
-			Error; err != nil {
-			return TopItems{}, ErrInternal
+			Limit(limit).
+			Find(q.dst).
+			Error
+		if err != nil {
+			return nil, ErrInternal
 		}
 	}
 
-	return topItems, nil
+	return top, nil
+}
+
+func (r *itemRepository) SearchRelated(
+	beanName string,
+	roast entity.Roast,
+	origin string,
+	mood entity.Mood,
+	method entity.Method,
+	limit int,
+	now time.Time,
+) ([]entity.Item, error) {
+
+	if limit <= 0 {
+		limit = 3
+	}
+	if limit > 3 {
+		limit = 3
+	}
+
+	// 候補語を作る。
+	// 空文字は除外し、重複も避ける。
+	terms := uniqueNonEmpty(
+		beanName,
+		string(roast),
+		origin,
+		string(mood),
+		string(method),
+	)
+
+	var items []entity.Item
+
+	// ベースクエリ。
+	tx := r.db.
+		Model(&entity.Item{}).
+		Preload("Source").
+		Where("published_at <= ?", now)
+
+	// 検索語が1つもない場合は、公開中Itemをkindの優先順で返す。
+	if len(terms) > 0 {
+		// title / summary の OR 条件を積み上げる。
+		parts := make([]string, 0, len(terms))
+		args := make([]any, 0, len(terms)*2)
+
+		for _, term := range terms {
+			like := "%" + term + "%"
+			parts = append(parts, "(title ILIKE ? OR summary ILIKE ?)")
+			args = append(args, like, like)
+		}
+
+		tx = tx.Where(strings.Join(parts, " OR "), args...)
+	}
+
+	// kindの優先順をCASE式で表現する。
+	kindOrder := `
+		CASE kind
+			WHEN 'recipe' THEN 1
+			WHEN 'shop' THEN 2
+			WHEN 'news' THEN 3
+			WHEN 'deal' THEN 4
+			ELSE 5
+		END
+	`
+	err := tx.
+		Order(kindOrder).
+		Order("published_at DESC").
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&items).
+		Error
+	if err != nil {
+		return nil, ErrInternal
+	}
+
+	return items, nil
+}
+
+// 空文字を除きつつ、重複しない文字列配列を返す。
+func uniqueNonEmpty(xs ...string) []string {
+	// 重複判定map。
+	seen := make(map[string]struct{})
+	// 結果配列。
+	out := make([]string, 0, len(xs))
+	for _, x := range xs {
+		// 前後空白を落とす。
+		v := strings.TrimSpace(x)
+
+		// 空文字は除外。
+		if v == "" {
+			continue
+		}
+
+		// すでに入っていれば飛ばす。
+		if _, ok := seen[v]; ok {
+			continue
+		}
+
+		// 初登場なら導入。
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+
+	return out
 }

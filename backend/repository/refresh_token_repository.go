@@ -14,7 +14,7 @@ type rtRepository struct {
 }
 
 func NewRtRepository(db *gorm.DB) RtRepository {
-	return &rtRepository{db: db}
+	return &rtRepository{db}
 }
 
 // refresh_tokensに1件保存する。
@@ -40,10 +40,7 @@ func (r *rtRepository) GetByTokenHash(tokenHash string) (*entity.Rt, error) {
 	var rt entity.Rt
 
 	//token_hashで検索する。
-	err := r.db.
-		Where("token_hash = ?", tokenHash).
-		First(&rt).
-		Error
+	err := r.db.Where("token_hash = ?", tokenHash).First(&rt).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
@@ -66,18 +63,15 @@ func (r *rtRepository) Update(rt *entity.Rt) error {
 	}
 
 	// 更新対象を明示して更新し、created_atは更新しない
-	res := r.db.
-		Model(&entity.Rt{}).
-		Where("id = ?", rt.ID).
-		Select(
-			"user_id",
-			"family_id",
-			"token_hash",
-			"expires_at",
-			"revoked_at",
-			"used_at",
-			"replaced_by_id",
-		).
+	res := r.db.Model(&entity.Rt{}).Where("id = ?", rt.ID).Select(
+		"user_id",
+		"family_id",
+		"token_hash",
+		"expires_at",
+		"revoked_at",
+		"used_at",
+		"replaced_by_id",
+	).
 		Updates(rt)
 
 	if res.Error != nil {
@@ -103,10 +97,7 @@ func (r *rtRepository) RevokeFamily(familyID string, revokedAt time.Time) error 
 	}
 
 	// 同じfamilyの失効tokenをまとめて更新する。
-	res := r.db.
-		Model(&entity.Rt{}).
-		Where("family_id = ? AND revoked_at IS NULL", familyID).
-		Update("revoked_at", revokedAt)
+	res := r.db.Model(&entity.Rt{}).Where("family_id = ? AND revoked_at IS NULL", familyID).Update("revoked_at", revokedAt)
 
 	if res.Error != nil {
 		return ErrInternal
@@ -118,9 +109,7 @@ func (r *rtRepository) RevokeFamily(familyID string, revokedAt time.Time) error 
 // 削除件数0でも正常。
 func (r *rtRepository) DeleteExpired(now time.Time) error {
 	// 期限切れ token を削除する。
-	res := r.db.
-		Where("expires_at < ?", now).
-		Delete(&entity.Rt{})
+	res := r.db.Where("expires_at < ?", now).Delete(&entity.Rt{})
 
 	if res.Error != nil {
 		return ErrInternal

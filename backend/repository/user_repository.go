@@ -13,7 +13,7 @@ type userRepository struct {
 }
 
 func NewUserRepository(db *gorm.DB) UserRepository {
-	return &userRepository{db: db}
+	return &userRepository{db}
 }
 
 // usersに新規ユーザーを保存する。
@@ -59,10 +59,7 @@ func (r *userRepository) GetByEmail(email string) (*entity.User, error) {
 	var user entity.User
 
 	// emailの完全一致で1件取得する。
-	err := r.db.
-		Where("email = ?", email).
-		First(&user).
-		Error
+	err := r.db.Where("email = ?", email).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
@@ -85,17 +82,14 @@ func (r *userRepository) Update(user *entity.User) error {
 	}
 
 	// 更新対象を明示し、created_atは更新しない。
-	res := r.db.
-		Model(&entity.User{}).
-		Where("id = ?", user.ID).
-		Select(
-			"email",
-			"pass_hash",
-			"role",
-			"token_ver",
-			"email_verified",
-			"updated_at",
-		).
+	res := r.db.Model(&entity.User{}).Where("id = ?", user.ID).Select(
+		"email",
+		"pass_hash",
+		"role",
+		"token_ver",
+		"email_verified",
+		"updated_at",
+	).
 		Updates(user)
 
 	if res.Error != nil {
@@ -119,10 +113,7 @@ func (r *userRepository) UpdateTokenVer(userID uint, tokenVer int) error {
 	}
 
 	// 指定されたuserのtoken_verを更新する。
-	res := r.db.
-		Model(&entity.User{}).
-		Where("id = ?", userID).
-		Update("token_ver", tokenVer)
+	res := r.db.Model(&entity.User{}).Where("id = ?", userID).Update("token_ver", tokenVer)
 
 	if res.Error != nil {
 		return ErrInternal
