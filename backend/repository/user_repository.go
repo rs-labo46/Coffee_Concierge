@@ -13,59 +13,116 @@ type userRepository struct {
 }
 
 func NewUserRepository(db *gorm.DB) UserRepository {
-	return &userRepository{db}
+	return &userRepository{db: db}
 }
 
-func (r *userRepository) Create(u entity.User) (entity.User, error) {
-	err := r.db.Create(&u).Error
+// usersに新規ユーザーを保存する。
+func (r *userRepository) Create(user *entity.User) error {
+	if user == nil {
+		return ErrInvalidState
+	}
+
+	// INSERTを実行する。
+	err := r.db.Create(user).Error
 	if err != nil {
 		if isDup(err) {
-			return entity.User{}, ErrConflict
+			return ErrConflict
 		}
-		return entity.User{}, ErrInternal
+		return ErrInternal
 	}
 
-	return u, nil
+	return nil
 }
 
-func (r *userRepository) GetByEmail(email string) (entity.User, error) {
-	var u entity.User
+// 主キーでusersを1件取得する。
+func (r *userRepository) GetByID(id uint) (*entity.User, error) {
+	// 0は不正ID。
+	if id == 0 {
+		return nil, ErrNotFound
+	}
+	var user entity.User
 
+	// 主キーで検索を行う。
+	err := r.db.First(&user, id).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, ErrInternal
+	}
+
+	return &user, nil
+}
+
+// emailでusersを1件取得する。
+func (r *userRepository) GetByEmail(email string) (*entity.User, error) {
+	var user entity.User
+
+	// emailの完全一致で1件取得する。
 	err := r.db.
 		Where("email = ?", email).
-		First(&u).
+		First(&user).
 		Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return entity.User{}, ErrNotFound
+			return nil, ErrNotFound
 		}
-		return entity.User{}, ErrInternal
+		return nil, ErrInternal
 	}
 
-	return u, nil
+	return &user, nil
 }
 
-func (r *userRepository) GetByID(id int64) (entity.User, error) {
-	var u entity.User
-
-	err := r.db.
-		First(&u, id).
-		Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return entity.User{}, ErrNotFound
-		}
-		return entity.User{}, ErrInternal
+// usersの可変項目を更新する(SaveではなくUpdatesを使い、主キー0の誤まりでのinsertを防ぐ)。
+func (r *userRepository) Update(user *entity.User) error {
+	if user == nil {
+		return ErrInvalidState
 	}
 
-	return u, nil
+	// 主キーなしの更新を防ぐ。
+	if user.ID == 0 {
+		return ErrInvalidState
+	}
+
+	// 更新対象を明示し、created_atは更新しない。
+	res := r.db.
+		Model(&entity.User{}).
+		Where("id = ?", user.ID).
+		Select(
+			"email",
+			"pass_hash",
+			"role",
+			"token_ver",
+			"email_verified",
+			"updated_at",
+		).
+		Updates(user)
+
+	if res.Error != nil {
+		//emailの重複はconflict。
+		if isDup(res.Error) {
+			return ErrConflict
+		}
+		return ErrInternal
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
-func (r *userRepository) SetEmailVerified(userID int64) error {
+// token_verを指定した値へと更新する。
+func (r *userRepository) UpdateTokenVer(userID uint, tokenVer int) error {
+	// 0は不正ID。
+	if userID == 0 {
+		return ErrNotFound
+	}
+
+	// 指定されたuserのtoken_verを更新する。
 	res := r.db.
 		Model(&entity.User{}).
 		Where("id = ?", userID).
-		Update("email_verified", true)
+		Update("token_ver", tokenVer)
 
 	if res.Error != nil {
 		return ErrInternal
@@ -75,48 +132,4 @@ func (r *userRepository) SetEmailVerified(userID int64) error {
 	}
 
 	return nil
-}
-
-func (r *userRepository) UpdatePassHash(userID int64, newHash string) error {
-	res := r.db.
-		Model(&entity.User{}).
-		Where("id = ?", userID).
-		Update("pass_hash", newHash)
-
-	if res.Error != nil {
-		return ErrInternal
-	}
-	if res.RowsAffected == 0 {
-		return ErrNotFound
-	}
-
-	return nil
-}
-
-func (r *userRepository) BumpTokenVer(userID int64) (int, error) {
-	res := r.db.
-		Model(&entity.User{}).
-		Where("id = ?", userID).
-		Update("token_ver", gorm.Expr("token_ver + 1"))
-
-	if res.Error != nil {
-		return 0, ErrInternal
-	}
-	if res.RowsAffected == 0 {
-		return 0, ErrNotFound
-	}
-
-	var u entity.User
-	err := r.db.
-		Select("token_ver").
-		First(&u, userID).
-		Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return 0, ErrNotFound
-		}
-		return 0, ErrInternal
-	}
-
-	return u.TokenVer, nil
 }
