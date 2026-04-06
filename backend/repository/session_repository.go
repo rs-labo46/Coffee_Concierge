@@ -106,6 +106,7 @@ func (r *sessionRepository) ListHistory(q HistoryQ) ([]entity.Session, error) {
 		Model(&entity.Session{}).
 		Where("user_id = ?", q.UserID).
 		Order("created_at DESC").
+		Order("id DESC").
 		Limit(limit).
 		Offset(offset).
 		Find(&sessions).
@@ -122,13 +123,17 @@ func (r *sessionRepository) CloseSession(id uint) error {
 		return ErrNotFound
 	}
 
+	now := time.Now()
+	session := entity.Session{
+		Status:    entity.SessionClosed,
+		UpdatedAt: now,
+	}
+
 	res := r.db.
 		Model(&entity.Session{}).
 		Where("id = ?", id).
-		Updates(map[string]interface{}{
-			"status":     entity.SessionClosed,
-			"updated_at": time.Now(),
-		})
+		Select("status", "updated_at").
+		Updates(&session)
 	if res.Error != nil {
 		return ErrInternal
 	}
@@ -197,31 +202,31 @@ func (r *sessionRepository) UpdatePref(pref *entity.Pref) error {
 		return ErrInvalidState
 	}
 
-	res := r.db.Model(&entity.Pref{}).
+	err := r.db.
+		Model(&entity.Pref{}).
 		Where("id = ?", pref.ID).
-		Updates(map[string]interface{}{
-			"flavor":     pref.Flavor,
-			"acidity":    pref.Acidity,
-			"bitterness": pref.Bitterness,
-			"body":       pref.Body,
-			"aroma":      pref.Aroma,
-			"mood":       pref.Mood,
-			"method":     pref.Method,
-			"scene":      pref.Scene,
-			"temp_pref":  pref.TempPref,
-			"excludes":   pref.Excludes,
-			"note":       pref.Note,
-			"updated_at": pref.UpdatedAt,
-			"session_id": pref.SessionID,
-		})
-	if res.Error != nil {
-		if isDup(res.Error) || isFK(res.Error) {
+		Select(
+			"session_id",
+			"flavor",
+			"acidity",
+			"bitterness",
+			"body",
+			"aroma",
+			"mood",
+			"method",
+			"scene",
+			"temp_pref",
+			"excludes",
+			"note",
+			"updated_at",
+		).
+		Updates(pref).
+		Error
+	if err != nil {
+		if isDup(err) || isFK(err) {
 			return ErrConflict
 		}
 		return ErrInternal
-	}
-	if res.RowsAffected == 0 {
-		return ErrNotFound
 	}
 
 	return nil
