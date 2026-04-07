@@ -37,7 +37,7 @@ type RecipeListQ struct {
 	Offset   int
 }
 
-// SSource一覧取得条件。
+// Source一覧取得条件。
 type SourceListQ struct {
 	Limit  int
 	Offset int
