@@ -110,6 +110,9 @@ type SearchVal interface {
 	SetPref(in SetPrefIn) error
 	AddTurn(in AddTurnIn) error
 	PatchPref(in PatchPrefIn) error
+	GetSession(in GetSessionIn) error
+	ListHistory(in ListHistoryIn) error
+	CloseSession(in CloseSessionIn) error
 }
 
 // 発話解析の結果。更新可能キーだけを持つ。
@@ -419,7 +422,7 @@ func (u *searchFlowUsecase) PatchPref(in PatchPrefIn) (PatchPrefOut, error) {
 	if in.TempPref != nil {
 		pref.TempPref = *in.TempPref
 	}
-	if len(in.Excludes) > 0 {
+	if in.Excludes != nil {
 		pref.Excludes = in.Excludes
 	}
 	if in.Note != nil {
@@ -658,13 +661,14 @@ func (u *searchFlowUsecase) applyDiff(pref *entity.Pref, diff ConditionDiff) {
 	if diff.TempPref != nil {
 		pref.TempPref = *diff.TempPref
 	}
-	if len(diff.Excludes) > 0 {
+	if diff.Excludes != nil {
 		pref.Excludes = diff.Excludes
 	}
 	if diff.Note != nil {
 		pref.Note = *diff.Note
 	}
 }
+
 func (u *searchFlowUsecase) writeAudit(
 	typ string,
 	userID *uint,

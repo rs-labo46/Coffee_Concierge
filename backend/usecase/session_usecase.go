@@ -46,23 +46,17 @@ type CloseSessionIn struct {
 	SessionKey string
 }
 
-type SessionVal interface {
-	GetSession(in GetSessionIn) error
-	ListHistory(in ListHistoryIn) error
-	CloseSession(in CloseSessionIn) error
-}
-
 type sessionUsecase struct {
 	sessions repository.SessionRepository
 	audits   repository.AuditRepository
-	val      SessionVal
+	val      SearchVal
 	clock    Clock
 }
 
 func NewSessionUsecase(
 	sessions repository.SessionRepository,
 	audits repository.AuditRepository,
-	val SessionVal,
+	val SearchVal,
 	clock Clock,
 ) SessionUC {
 	return &sessionUsecase{

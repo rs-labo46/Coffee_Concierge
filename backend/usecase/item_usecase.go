@@ -12,7 +12,7 @@ import (
 type ItemUC interface {
 	Create(actor entity.Actor, in CreateItemIn) (entity.Item, error)
 	Get(id uint) (entity.Item, error)
-	List(q string, kind entity.ItemKind, limit int, offset int) ([]entity.Item, error)
+	List(q entity.ItemQ) ([]entity.Item, error)
 	Top(limit int) (entity.TopItems, error)
 }
 
@@ -27,12 +27,11 @@ type CreateItemIn struct {
 	PublishedAt time.Time
 }
 
-// Item 系のvalidator。
+// Item系のvalidator。
 type ItemVal interface {
-	NewItem(in CreateItemIn) error
+	Create(in CreateItemIn) error
 	Get(id uint) error
-	List(q string, kind entity.ItemKind, limit int, offset int) error
-	Top(limit int) error
+	List(q entity.ItemQ) error
 }
 
 type itemUsecase struct {
@@ -64,7 +63,7 @@ func (u *itemUsecase) Create(actor entity.Actor, in CreateItemIn) (entity.Item, 
 		return entity.Item{}, repository.ErrForbidden
 	}
 
-	if err := u.val.NewItem(in); err != nil {
+	if err := u.val.Create(in); err != nil {
 		return entity.Item{}, err
 	}
 
@@ -116,21 +115,16 @@ func (u *itemUsecase) Get(id uint) (entity.Item, error) {
 }
 
 // Item一覧を返す。
-func (u *itemUsecase) List(
-	q string,
-	kind entity.ItemKind,
-	limit int,
-	offset int,
-) ([]entity.Item, error) {
-	if err := u.val.List(q, kind, limit, offset); err != nil {
+func (u *itemUsecase) List(q entity.ItemQ) ([]entity.Item, error) {
+	if err := u.val.List(q); err != nil {
 		return nil, err
 	}
 
 	out, err := u.items.List(repository.ItemListQ{
-		Q:      q,
-		Kind:   kind,
-		Limit:  limit,
-		Offset: offset,
+		Q:      q.Q,
+		Kind:   q.Kind,
+		Limit:  q.Limit,
+		Offset: q.Offset,
 	})
 	if err != nil {
 		return nil, err
@@ -141,10 +135,6 @@ func (u *itemUsecase) List(
 
 // Top表示用のカテゴリ別アイテム
 func (u *itemUsecase) Top(limit int) (entity.TopItems, error) {
-	if err := u.val.Top(limit); err != nil {
-		return entity.TopItems{}, err
-	}
-
 	top, err := u.items.Top(limit)
 	if err != nil {
 		return entity.TopItems{}, err

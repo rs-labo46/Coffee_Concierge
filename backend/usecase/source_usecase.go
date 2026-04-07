@@ -22,7 +22,7 @@ type CreateSourceIn struct {
 
 // Source系の、validator。
 type SourceVal interface {
-	NewSource(in CreateSourceIn) error
+	Create(in CreateSourceIn) error
 	Get(id uint) error
 	List(limit int, offset int) error
 }
@@ -52,7 +52,7 @@ func (u *sourceUsecase) Create(actor entity.Actor, in CreateSourceIn) (entity.So
 		return entity.Source{}, repository.ErrForbidden
 	}
 
-	if err := u.val.NewSource(in); err != nil {
+	if err := u.val.Create(in); err != nil {
 		return entity.Source{}, err
 	}
 
