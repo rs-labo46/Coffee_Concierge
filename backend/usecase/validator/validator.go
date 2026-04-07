@@ -1,7 +1,8 @@
-package validator
+package usecase
 
 import (
 	"coffee-spa/entity"
+	"coffee-spa/usecase"
 	"time"
 )
 
@@ -123,4 +124,9 @@ type IDPol interface {
 // ページングの値を検証
 type PagePol interface {
 	Check(limit int, offset int) error
+}
+
+type AuthVal interface {
+	SignUp(in usecase.SignupIn) error
+	Login(in usecase.LoginIn) error
 }
