@@ -1,11 +1,10 @@
 package usecase
 
 import (
-	"encoding/json"
-	"strconv"
-
 	"coffee-spa/entity"
 	"coffee-spa/repository"
+	"encoding/json"
+	"strconv"
 )
 
 // Beanの作成・更新・取得・一覧を扱う。
@@ -54,13 +53,6 @@ type UpdateBeanIn struct {
 	Desc       string
 	BuyURL     string
 	Active     bool
-}
-
-type BeanVal interface {
-	Create(in CreateBeanIn) error
-	Update(in UpdateBeanIn) error
-	Get(id uint) error
-	List(in BeanListIn) error
 }
 
 type beanUsecase struct {

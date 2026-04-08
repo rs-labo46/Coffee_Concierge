@@ -33,13 +33,6 @@ type DeleteSavedIn struct {
 	SuggestionID uint
 }
 
-// 保存バリデーター
-type SavedVal interface {
-	Save(in SaveSuggestionIn) error
-	List(in ListSavedIn) error
-	Delete(in DeleteSavedIn) error
-}
-
 type savedUsecase struct {
 	saveds   repository.SavedRepository
 	sessions repository.SessionRepository

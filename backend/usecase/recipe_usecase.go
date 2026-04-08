@@ -53,13 +53,6 @@ type UpdateRecipeIn struct {
 	Active   bool
 }
 
-type RecipeVal interface {
-	Create(in CreateRecipeIn) error
-	Update(in UpdateRecipeIn) error
-	Get(id uint) error
-	List(in RecipeListIn) error
-}
-
 type recipeUsecase struct {
 	recipes repository.RecipeRepository
 	beans   repository.BeanRepository

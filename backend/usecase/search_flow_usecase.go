@@ -104,17 +104,6 @@ type SearchResult struct {
 	Followups   []string
 }
 
-// Search系のvalidator。
-type SearchVal interface {
-	StartSession(in StartSessionIn) error
-	SetPref(in SetPrefIn) error
-	AddTurn(in AddTurnIn) error
-	PatchPref(in PatchPrefIn) error
-	GetSession(in GetSessionIn) error
-	ListHistory(in ListHistoryIn) error
-	CloseSession(in CloseSessionIn) error
-}
-
 // 発話解析の結果。更新可能キーだけを持つ。
 type ConditionDiff struct {
 	Flavor     *int

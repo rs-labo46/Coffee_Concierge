@@ -10,7 +10,6 @@ import (
 	"coffee-spa/config"
 	"coffee-spa/controller"
 	"coffee-spa/db"
-	"coffee-spa/policy"
 	"coffee-spa/repository"
 	"coffee-spa/router"
 	"coffee-spa/usecase"
@@ -66,18 +65,14 @@ func main() {
 	itemRepo := repository.NewItemRepository(d.G)
 	auditRepo := repository.NewAuditRepository(d.G)
 
-	pwPol := policy.NewPwPol()
-	emailPol := policy.NewEmailPol()
-	kindPol := policy.NewKindPol()
-	urlPol := policy.NewURLPol()
-	pagePol := policy.NewPagePol()
-
-	authVal := validator.NewAuthValidator(emailPol, pwPol)
-	itemVal := validator.NewItemValidator(kindPol, urlPol, pagePol)
-	sourceVal := validator.NewSourceValidator(urlPol)
+	authVal := validator.NewAuthValidator()
+	itemVal := validator.NewItemValidator()
+	sourceVal := validator.NewSourceValidator()
 
 	ph := usecase.NewBcryptHasher()
 	tk := usecase.NewJWTMaker(c.JWTSecret)
+	clock := usecase.NewRealClock()
+	idGen := usecase.NewRandomIDGen()
 	mail := usecase.NewLogMailer(c.FEURL)
 
 	rlStore := repository.NewRateLimitStore(rdb)
@@ -93,7 +88,7 @@ func main() {
 	)
 
 	healthUC := usecase.NewHealthUC(d.S)
-	authUC := usecase.NewAuthUC(
+	authUC := usecase.NewAuthUsecase(
 		userRepo,
 		evRepo,
 		pwRepo,
@@ -102,15 +97,19 @@ func main() {
 		authVal,
 		ph,
 		tk,
+		clock,
+		idGen,
 		mail,
-		rl,
+		24*time.Hour,
+		30*time.Minute,
+		7*24*time.Hour,
 	)
-	itemUC := usecase.NewItemUC(
+	itemUC := usecase.NewItemUsecase(
 		itemRepo,
 		auditRepo,
 		itemVal,
 	)
-	sourceUC := usecase.NewSourceUC(
+	sourceUC := usecase.NewSourceUsecase(
 		sourceRepo,
 		auditRepo,
 		sourceVal,

@@ -27,13 +27,6 @@ type CreateItemIn struct {
 	PublishedAt time.Time
 }
 
-// Item系のvalidator。
-type ItemVal interface {
-	Create(in CreateItemIn) error
-	Get(id uint) error
-	List(q entity.ItemQ) error
-}
-
 type itemUsecase struct {
 	items   repository.ItemRepository
 	sources repository.SourceRepository

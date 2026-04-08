@@ -18,11 +18,6 @@ type AuditListIn struct {
 	Offset int
 }
 
-// 監査検索 validator。
-type AuditVal interface {
-	List(in AuditListIn) error
-}
-
 type auditUsecase struct {
 	audits repository.AuditRepository
 	val    AuditVal

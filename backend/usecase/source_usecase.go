@@ -20,13 +20,6 @@ type CreateSourceIn struct {
 	SiteURL string
 }
 
-// Source系の、validator。
-type SourceVal interface {
-	Create(in CreateSourceIn) error
-	Get(id uint) error
-	List(limit int, offset int) error
-}
-
 type sourceUsecase struct {
 	sources repository.SourceRepository
 	audits  repository.AuditRepository
