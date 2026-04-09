@@ -75,18 +75,6 @@ func main() {
 	idGen := usecase.NewRandomIDGen()
 	mail := usecase.NewLogMailer(c.FEURL)
 
-	rlStore := repository.NewRateLimitStore(rdb)
-	rl := usecase.NewRateLimitUC(
-		rlStore,
-		usecase.RateRule{Limit: 1, Window: 5 * time.Second},
-		usecase.RateRule{Limit: 1, Window: 5 * time.Second},
-		usecase.RateRule{Limit: 1, Window: 2 * time.Second},
-		usecase.RateRule{Limit: 1, Window: 2 * time.Second},
-		usecase.RateRule{Limit: 1, Window: 4 * time.Second},
-		usecase.RateRule{Limit: 1, Window: 2 * time.Second},
-		usecase.RateRule{Limit: 1, Window: 4 * time.Second},
-	)
-
 	healthUC := usecase.NewHealthUC(d.S)
 	authUC := usecase.NewAuthUsecase(
 		userRepo,
@@ -97,6 +85,7 @@ func main() {
 		authVal,
 		ph,
 		tk,
+		tk,
 		clock,
 		idGen,
 		mail,
@@ -106,6 +95,7 @@ func main() {
 	)
 	itemUC := usecase.NewItemUsecase(
 		itemRepo,
+		sourceRepo,
 		auditRepo,
 		itemVal,
 	)
