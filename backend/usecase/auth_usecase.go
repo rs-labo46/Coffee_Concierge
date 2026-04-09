@@ -16,8 +16,11 @@ type AuthUC interface {
 	Signup(in SignupIn) (SignupOut, error)
 	VerifyEmail(in VerifyEmailIn) error
 	Login(in LoginIn) (LoginOut, error)
+	Refresh(in RefreshIn) (RefreshOut, error)
+	Logout(actor entity.Actor, refreshToken string) error
 	ForgotPw(in ForgotPwIn) error
 	ResetPw(in ResetPwIn) error
+	Me(actor entity.Actor) (entity.User, error)
 }
 
 // 新規登録入力。

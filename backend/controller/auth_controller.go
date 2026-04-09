@@ -2,6 +2,8 @@ package controller
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"coffee-spa/entity"
 	"coffee-spa/usecase"
@@ -9,52 +11,57 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+const (
+	// refresh tokenを保存するcookie名。
+	refreshCookieName = "refresh_token"
+
+	// refresh tokenをのせるcookieのpath。refresh/logoutなど認証でcookieを使う。
+	refreshCookiePath = "/auth"
+)
+
+// 認証系HTTPendpointの入口で、依存先はusecase.AuthUCのみ。
 type AuthCtl struct {
-	uc usecase.AuthUsecase
+	uc usecase.AuthUC
 }
 
-func NewAuthCtl(uc usecase.AuthUsecase) AuthCtl {
-	return AuthCtl{
+// AuthCtlを生成。
+func NewAuthCtl(uc usecase.AuthUC) *AuthCtl {
+	return &AuthCtl{
 		uc: uc,
 	}
 }
 
-// signupの入力。
+// signupのrequestbody 。
 type SignupReq struct {
-	Email string `json:"email"`
-	Pw    string `json:"password"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-// verify emailの入力。
+// verifyemailのrequest body 。
 type VerifyEmailReq struct {
 	Token string `json:"token"`
 }
 
-// verify再送の入力。
-type ResendVerifyReq struct {
-	Email string `json:"email"`
-}
-
-// loginの入力。
+// loginのrequest body 。
 type LoginReq struct {
-	Email string `json:"email"`
-	Pw    string `json:"password"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-// forgot passwordの入力。
+// password forgotのrequestbody 。
 type ForgotPwReq struct {
 	Email string `json:"email"`
 }
 
-// reset passwordの入力。
+// password resetのrequest body 。
 type ResetPwReq struct {
-	Token string `json:"token"`
-	NewPw string `json:"new_password"`
+	Token    string `json:"token"`
+	Password string `json:"password"`
 }
 
-// 認証系レスポンスで返すuser 。
+// 認証系のresponseで返すuserの形。
 type AuthUserRes struct {
-	ID            int64  `json:"id"`
+	ID            uint   `json:"id"`
 	Email         string `json:"email"`
 	Role          string `json:"role"`
 	TokenVer      int    `json:"token_ver"`
@@ -66,207 +73,247 @@ type SignupRes struct {
 	User AuthUserRes `json:"user"`
 }
 
-// login / refresh成功レスポンス。
+// login/refresh成功時のレスポンス。
 type AuthRes struct {
 	AccessToken string      `json:"access_token"`
 	User        AuthUserRes `json:"user"`
 }
 
-// /me成功レスポンス。
+// /meのレスポンス。
 type MeRes struct {
 	User AuthUserRes `json:"user"`
 }
 
-// POST /auth/signupを処理。
-func (ctl AuthCtl) Signup(c echo.Context) error {
+// POST /auth/signup
+func (ctl *AuthCtl) Signup(c echo.Context) error {
 	var req SignupReq
 
-	if err := bindJSON(c, &req); err != nil {
-		return err
+	// request bodyのbindに失敗したら、HTTP境界の入力不正。
+	if err := c.Bind(&req); err != nil {
+		return writeErr(c, ErrInvalidRequest)
 	}
 
-	u, err := ctl.uc.Signup(usecase.SignupIn{
-		Email: req.Email,
-		Pw:    req.Pw,
-		IP:    realIP(c),
-		UA:    userAgent(c),
+	out, err := ctl.uc.Signup(usecase.SignupIn{
+		Email:    req.Email,
+		Password: req.Password,
 	})
 	if err != nil {
 		return writeErr(c, err)
 	}
 
 	return c.JSON(http.StatusCreated, SignupRes{
-		User: toAuthUserRes(u),
+		User: toAuthUserRes(out.User),
 	})
 }
 
-// POST /auth/verify-emailを処理。
-func (ctl AuthCtl) VerifyEmail(c echo.Context) error {
+// POST /auth/verify-email
+func (ctl *AuthCtl) VerifyEmail(c echo.Context) error {
 	var req VerifyEmailReq
 
-	if err := bindJSON(c, &req); err != nil {
-		return err
+	if err := c.Bind(&req); err != nil {
+		return writeErr(c, ErrInvalidRequest)
 	}
 
 	err := ctl.uc.VerifyEmail(usecase.VerifyEmailIn{
 		Token: req.Token,
-		IP:    realIP(c),
-		UA:    userAgent(c),
 	})
 	if err != nil {
 		return writeErr(c, err)
 	}
 
-	return c.NoContent(http.StatusNoContent)
-}
-
-// POST /auth/resend-verifyを処理。
-func (ctl AuthCtl) ResendVerify(c echo.Context) error {
-	var req ResendVerifyReq
-
-	if err := bindJSON(c, &req); err != nil {
-		return err
-	}
-
-	err := ctl.uc.ResendVerify(usecase.ResendVerifyIn{
-		Email: req.Email,
-		IP:    realIP(c),
-		UA:    userAgent(c),
+	return c.JSON(http.StatusOK, MsgRes{
+		Message: "email verified",
 	})
-	if err != nil {
-		return writeErr(c, err)
-	}
-
-	return c.NoContent(http.StatusNoContent)
 }
 
-// POST /auth/loginを処理。
-func (ctl AuthCtl) Login(c echo.Context) error {
+// POST /auth/login
+func (ctl *AuthCtl) Login(c echo.Context) error {
 	var req LoginReq
 
-	if err := bindJSON(c, &req); err != nil {
-		return err
+	if err := c.Bind(&req); err != nil {
+		return writeErr(c, ErrInvalidRequest)
 	}
 
-	loginResult, err := ctl.uc.Login(usecase.LoginIn{
+	out, err := ctl.uc.Login(usecase.LoginIn{
+		Email:    req.Email,
+		Password: req.Password,
+		UA:       userAgent(c),
+		IP:       clientIP(c),
+	})
+	if err != nil {
+		return writeErr(c, err)
+	}
+
+	// refresh tokenはHttpOnly cookieに保存。
+	setRefreshCookie(
+		c,
+		refreshCookieName,
+		out.RefreshToken,
+		authRefreshCookieMaxAgeSec(),
+		authCookieSecure(),
+		http.SameSiteLaxMode,
+		refreshCookiePath,
+		authCookieDomain(),
+	)
+
+	return c.JSON(http.StatusOK, AuthRes{
+		AccessToken: out.AccessToken,
+		User:        toAuthUserRes(out.User),
+	})
+}
+
+// POST /auth/refresh
+// cookieのrefresh tokenを使う。
+func (ctl *AuthCtl) Refresh(c echo.Context) error {
+	// cookie から refresh token を取ります。
+	refreshToken := cookieValue(c, refreshCookieName)
+
+	out, err := ctl.uc.Refresh(usecase.RefreshIn{
+		RefreshToken: refreshToken,
+		UA:           userAgent(c),
+		IP:           clientIP(c),
+	})
+	if err != nil {
+		return writeErr(c, err)
+	}
+
+	// rotate後の新しいrefresh tokenをcookieに再設定。
+	setRefreshCookie(
+		c,
+		refreshCookieName,
+		out.RefreshToken,
+		authRefreshCookieMaxAgeSec(),
+		authCookieSecure(),
+		http.SameSiteLaxMode,
+		refreshCookiePath,
+		authCookieDomain(),
+	)
+
+	return c.JSON(http.StatusOK, AuthRes{
+		AccessToken: out.AccessToken,
+		User:        toAuthUserRes(out.User),
+	})
+}
+
+// POST /auth/logout
+func (ctl *AuthCtl) Logout(c echo.Context) error {
+	// 認証必須だからactorを要求。
+	actor, err := requireActor(c)
+	if err != nil {
+		return writeErr(c, err)
+	}
+
+	//cookieから取る。
+	refreshToken := cookieValue(c, refreshCookieName)
+
+	err = ctl.uc.Logout(*actor, refreshToken)
+	if err != nil {
+		return writeErr(c, err)
+	}
+
+	// logoutの成功時はrefresh cookieを削除。
+	clearRefreshCookie(
+		c,
+		refreshCookieName,
+		authCookieSecure(),
+		http.SameSiteLaxMode,
+		refreshCookiePath,
+		authCookieDomain(),
+	)
+
+	return c.JSON(http.StatusOK, MsgRes{
+		Message: "logged out",
+	})
+}
+
+// POST /auth/password/forgot
+func (ctl *AuthCtl) ForgotPw(c echo.Context) error {
+	var req ForgotPwReq
+
+	// request body の bind 失敗は invalid_request 。
+	if err := c.Bind(&req); err != nil {
+		return writeErr(c, ErrInvalidRequest)
+	}
+
+	err := ctl.uc.ForgotPw(usecase.ForgotPwIn{
 		Email: req.Email,
-		Pw:    req.Pw,
-		IP:    realIP(c),
-		UA:    userAgent(c),
 	})
 	if err != nil {
 		return writeErr(c, err)
 	}
 
-	setRefreshCookie(c, loginResult.Rt)
-	setCSRFCookie(c, loginResult.CsrfToken)
-
-	return c.JSON(http.StatusOK, AuthRes{
-		AccessToken: loginResult.AccessToken,
-		User:        toAuthUserRes(loginResult.User),
+	return c.JSON(http.StatusOK, MsgRes{
+		Message: "if the email exists, a reset mail has been sent",
 	})
 }
 
-// POST /auth/refreshを処理。
-func (ctl AuthCtl) Refresh(c echo.Context) error {
-	refreshResult, err := ctl.uc.Refresh(usecase.RefreshIn{
-		Rt: refreshCookie(c),
-		IP: realIP(c),
-		UA: userAgent(c),
+// POST /auth/password/reset
+func (ctl *AuthCtl) ResetPw(c echo.Context) error {
+	var req ResetPwReq
+
+	if err := c.Bind(&req); err != nil {
+		return writeErr(c, ErrInvalidRequest)
+	}
+
+	err := ctl.uc.ResetPw(usecase.ResetPwIn{
+		Token:    req.Token,
+		Password: req.Password,
 	})
 	if err != nil {
 		return writeErr(c, err)
 	}
 
-	setRefreshCookie(c, refreshResult.Rt)
-	setCSRFCookie(c, refreshResult.CsrfToken)
-
-	return c.JSON(http.StatusOK, AuthRes{
-		AccessToken: refreshResult.AccessToken,
-		User:        toAuthUserRes(refreshResult.User),
+	return c.JSON(http.StatusOK, MsgRes{
+		Message: "password reset completed",
 	})
 }
 
-// POST /auth/logoutを処理。
-func (ctl AuthCtl) Logout(c echo.Context) error {
-	err := ctl.uc.Logout(usecase.LogoutIn{
-		UserID: userIDFromCtx(c),
-		Rt:     refreshCookie(c),
-		IP:     realIP(c),
-		UA:     userAgent(c),
-	})
+// GET /me
+// actorから自分のuserを取得して返す。
+// キャッシュしてはいけないからno-store。
+func (ctl *AuthCtl) Me(c echo.Context) error {
+	// 認証必須。
+	actor, err := requireActor(c)
 	if err != nil {
 		return writeErr(c, err)
 	}
 
-	clearRefreshCookie(c)
-	clearCSRFCookie(c)
-
-	return c.NoContent(http.StatusNoContent)
-}
-
-// GET /meを処理。
-func (ctl AuthCtl) Me(c echo.Context) error {
-	u, err := ctl.uc.Me(userIDFromCtx(c))
+	u, err := ctl.uc.Me(*actor)
 	if err != nil {
 		return writeErr(c, err)
 	}
 
-	c.Response().Header().Set("Cache-Control", "no-store")
+	// 認証情報に紐づくレスポンスだかエアキャッシュ禁止。
+	setNoStore(c)
 
 	return c.JSON(http.StatusOK, MeRes{
 		User: toAuthUserRes(u),
 	})
 }
 
-// POST /auth/password/forgotを処理。
-func (ctl AuthCtl) ForgotPw(c echo.Context) error {
-	var req ForgotPwReq
-
-	if err := bindJSON(c, &req); err != nil {
-		return err
-	}
-
-	err := ctl.uc.ForgotPw(usecase.ForgotPwIn{
-		Email: req.Email,
-		IP:    realIP(c),
-		UA:    userAgent(c),
-	})
-	if err != nil {
-		return writeErr(c, err)
-	}
-
-	return c.NoContent(http.StatusNoContent)
-}
-
-// POST /auth/password/resetを処理。
-func (ctl AuthCtl) ResetPw(c echo.Context) error {
-	var req ResetPwReq
-
-	if err := bindJSON(c, &req); err != nil {
-		return err
-	}
-
-	err := ctl.uc.ResetPw(usecase.ResetPwIn{
-		Token: req.Token,
-		NewPw: req.NewPw,
-		IP:    realIP(c),
-		UA:    userAgent(c),
-	})
-	if err != nil {
-		return writeErr(c, err)
-	}
-
-	return c.NoContent(http.StatusNoContent)
-}
-
-// entity.Userを認証レスポンス用に変換。
+// entity.Userを認証系レスポンス用のshapeに変換。
 func toAuthUserRes(u entity.User) AuthUserRes {
 	return AuthUserRes{
 		ID:            u.ID,
 		Email:         u.Email,
-		Role:          u.Role,
+		Role:          string(u.Role),
 		TokenVer:      u.TokenVer,
 		EmailVerified: u.EmailVerified,
 	}
+}
+
+// refresh cookieにSecureを付けるかを返す。
+func authCookieSecure() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SECURE")))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+// cookieのdomainを返す。未指定なら空文字のままに。
+func authCookieDomain() string {
+	return strings.TrimSpace(os.Getenv("COOKIE_DOMAIN"))
+}
+
+// refresh cookieのMaxAge秒数。
+func authRefreshCookieMaxAgeSec() int {
+	return 24 * 60 * 60
 }

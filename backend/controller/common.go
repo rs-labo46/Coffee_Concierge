@@ -1,201 +1,292 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"coffee-spa/usecase"
+	"coffee-spa/entity"
+	"coffee-spa/repository"
 
 	"github.com/labstack/echo/v4"
 )
 
-type ErrRes struct {
-	Error   string `json:"error"`
-	Message string `json:"message,omitempty"`
+const (
+	// guest再開やguest操作で使うヘッダ名。
+	HeaderSessionKey = "X-Session-Key"
+
+	// middlewareがecho.Contextにactorを入れるときのキー
+	ContextActorKey = "actor"
+)
+
+// 成功時の簡易メッセージレスポンス
+type MsgRes struct {
+	Message string `json:"message"`
 }
 
-// middlewareがcontextに入れたuser_id / roleをusecaseが受け取れるActorに変換。
-func actorFromCtx(c echo.Context) usecase.Actor {
-	userID, _ := c.Get("user_id").(int64)
-	role, _ := c.Get("role").(string)
-
-	return usecase.Actor{
-		UserID: userID,
-		Role:   role,
-		IP:     realIP(c),
-		UA:     userAgent(c),
+// middlewareがcontextに入れたactorを取り出す。
+func actorFromCtx(c echo.Context) *entity.Actor {
+	v := c.Get(ContextActorKey)
+	if v == nil {
+		return nil
 	}
-}
 
-// middlewareがcontextに入れたuser_idを取り出す。
-func userIDFromCtx(c echo.Context) int64 {
-	userID, _ := c.Get("user_id").(int64)
-	return userID
-}
-
-// リクエスト元IPを返す。
-func realIP(c echo.Context) string {
-	x := strings.TrimSpace(c.RealIP())
-	if x != "" {
-		return x
+	if a, ok := v.(*entity.Actor); ok {
+		if a == nil {
+			return nil
+		}
+		return a
 	}
-	return ""
-}
 
-// User-Agentを返す。
-func userAgent(c echo.Context) string {
-	return c.Request().UserAgent()
-}
-
-func bindJSON(c echo.Context, dst interface{}) error {
-	if err := c.Bind(dst); err != nil {
-		return usecase.ErrInvalidRequest
+	if a, ok := v.(entity.Actor); ok {
+		cp := a
+		return &cp
 	}
+
 	return nil
 }
 
-// query parameterをintに変換。
-// 値が無いときはdefを返し、不正値ならErrInvalidRequestを返す。
-func qInt(c echo.Context, key string, def int) (int, error) {
-	s := strings.TrimSpace(c.QueryParam(key))
-	if s == "" {
+// 認証必須
+func requireActor(c echo.Context) (*entity.Actor, error) {
+	a := actorFromCtx(c)
+	if a == nil {
+		return nil, repository.ErrUnauthorized
+	}
+	return a, nil
+}
+
+// X-Session-Keyを取り出す(空白は空文字)
+func sessionKeyFromHeader(c echo.Context) string {
+	v := strings.TrimSpace(c.Request().Header.Get(HeaderSessionKey))
+	if v == "" {
+		return ""
+	}
+	return v
+}
+
+// guest必須
+func requireSessionKey(c echo.Context) (string, error) {
+	key := sessionKeyFromHeader(c)
+	if key == "" {
+		return "", ErrInvalidRequest
+	}
+	return key, nil
+}
+
+// path paramをuintに変換。
+func pUint(c echo.Context, name string) (uint, error) {
+	raw := strings.TrimSpace(c.Param(name))
+	if raw == "" {
+		return 0, ErrInvalidRequest
+	}
+
+	n, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0, ErrInvalidRequest
+	}
+	if n == 0 {
+		return 0, ErrInvalidRequest
+	}
+
+	return uint(n), nil
+}
+
+// query stringの整数値を取得。
+func qInt(c echo.Context, name string, def int) (int, error) {
+	raw := strings.TrimSpace(c.QueryParam(name))
+	if raw == "" {
 		return def, nil
 	}
 
-	n, err := strconv.Atoi(s)
+	n, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, usecase.ErrInvalidRequest
+		return 0, ErrInvalidRequest
 	}
 
 	return n, nil
 }
 
-// cookieにSecureを付けるかを環境変数から判定。
-func secureCookie() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SECURE")))
-	return v == "1" || v == "true" || v == "yes"
+// query stringのuintを取得。
+func qUint(c echo.Context, name string) (*uint, error) {
+	raw := strings.TrimSpace(c.QueryParam(name))
+	if raw == "" {
+		return nil, nil
+	}
+
+	n, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return nil, ErrInvalidRequest
+	}
+	if n == 0 {
+		return nil, ErrInvalidRequest
+	}
+
+	v := uint(n)
+	return &v, nil
 }
 
-// refresh_token cookieをセット。
-// Pathは/authに固定。
-func setRefreshCookie(c echo.Context, token string) {
-	c.SetCookie(&http.Cookie{
-		Name:     "refresh_token",
-		Value:    token,
-		Path:     "/auth",
-		HttpOnly: true,
-		Secure:   secureCookie(),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   24 * 60 * 60,
-	})
+// query stringのboolを取得。
+func qBool(c echo.Context, name string) (*bool, error) {
+	raw := strings.TrimSpace(c.QueryParam(name))
+	if raw == "" {
+		return nil, nil
+	}
+
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return nil, ErrInvalidRequest
+	}
+
+	return &v, nil
 }
 
-// csrf_token cookieをセット。
-// Pathは/に固定。
-func setCSRFCookie(c echo.Context, token string) {
-	c.SetCookie(&http.Cookie{
-		Name:     "csrf_token",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: false,
-		Secure:   secureCookie(),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   24 * 60 * 60,
-	})
+// 未指定なら空文字
+func qStr(c echo.Context, name string) string {
+	return strings.TrimSpace(c.QueryParam(name))
 }
 
-// refresh_token cookieを削除。
-func clearRefreshCookie(c echo.Context) {
-	c.SetCookie(&http.Cookie{
-		Name:     "refresh_token",
-		Value:    "",
-		Path:     "/auth",
-		HttpOnly: true,
-		Secure:   secureCookie(),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   0,
-		Expires:  time.Unix(0, 0),
-	})
+// アクセス元のIPを返す。
+func clientIP(c echo.Context) string {
+	return strings.TrimSpace(c.RealIP())
 }
 
-// csrf_token cookieを削除。
-func clearCSRFCookie(c echo.Context) {
-	c.SetCookie(&http.Cookie{
-		Name:     "csrf_token",
-		Value:    "",
-		Path:     "/",
-		HttpOnly: false,
-		Secure:   secureCookie(),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   0,
-		Expires:  time.Unix(0, 0),
-	})
+// User-Agentを返す。
+func userAgent(c echo.Context) string {
+	return strings.TrimSpace(c.Request().UserAgent())
 }
 
-// refresh_token cookieの値を返す。
-// cookieが無ければ空文字を返す。
-func refreshCookie(c echo.Context) string {
-	x, err := c.Cookie("refresh_token")
+// キャッシュさせたくないレスポンスの
+func setNoStore(c echo.Context) {
+	h := c.Response().Header()
+	h.Set(echo.HeaderCacheControl, "no-store")
+	h.Set("Pragma", "no-cache")
+	h.Set("Expires", "0")
+}
+
+// 共通cookie設定の
+func setCookie(
+	c echo.Context,
+	name string,
+	value string,
+	maxAgeSec int,
+	httpOnly bool,
+	secure bool,
+	sameSite http.SameSite,
+	path string,
+	domain string,
+) {
+	ck := new(http.Cookie)
+	ck.Name = name
+	ck.Value = value
+	ck.MaxAge = maxAgeSec
+
+	if path == "" {
+		ck.Path = "/"
+	} else {
+		ck.Path = path
+	}
+
+	if domain != "" {
+		ck.Domain = domain
+	}
+
+	ck.HttpOnly = httpOnly
+	ck.Secure = secure
+	ck.SameSite = sameSite
+
+	if maxAgeSec > 0 {
+		ck.Expires = time.Now().Add(time.Duration(maxAgeSec) * time.Second)
+	}
+
+	http.SetCookie(c.Response(), ck)
+}
+
+// cookieの削除 (PathとDomainはset時と揃える)
+func clearCookie(
+	c echo.Context,
+	name string,
+	path string,
+	domain string,
+	httpOnly bool,
+	secure bool,
+	sameSite http.SameSite,
+) {
+	ck := new(http.Cookie)
+	ck.Name = name
+	ck.Value = ""
+	ck.MaxAge = -1
+	ck.Expires = time.Unix(0, 0)
+
+	if path == "" {
+		ck.Path = "/"
+	} else {
+		ck.Path = path
+	}
+
+	if domain != "" {
+		ck.Domain = domain
+	}
+
+	ck.HttpOnly = httpOnly
+	ck.Secure = secure
+	ck.SameSite = sameSite
+
+	http.SetCookie(c.Response(), ck)
+}
+
+// request cookieを読む。
+func cookieValue(c echo.Context, name string) string {
+	ck, err := c.Cookie(name)
 	if err != nil {
 		return ""
 	}
-	return x.Value
+	if ck == nil {
+		return ""
+	}
+	return strings.TrimSpace(ck.Value)
 }
 
-// usecaseのエラーをHTTPステータスへ変換。
-func writeErr(c echo.Context, err error) error {
-	if err == nil {
-		return nil
-	}
+// refresh token
+func setRefreshCookie(
+	c echo.Context,
+	cookieName string,
+	token string,
+	maxAgeSec int,
+	secure bool,
+	sameSite http.SameSite,
+	path string,
+	domain string,
+) {
+	setCookie(
+		c,
+		cookieName,
+		token,
+		maxAgeSec,
+		true,
+		secure,
+		sameSite,
+		path,
+		domain,
+	)
+}
 
-	var rl usecase.ErrRateLimited
-
-	switch {
-	case errors.Is(err, usecase.ErrInvalidRequest):
-		return c.JSON(http.StatusBadRequest, ErrRes{
-			Error:   "invalid_request",
-			Message: "request body or query is invalid",
-		})
-
-	case errors.Is(err, usecase.ErrUnauthorized):
-		return c.JSON(http.StatusUnauthorized, ErrRes{
-			Error:   "unauthorized",
-			Message: "authentication failed",
-		})
-
-	case errors.Is(err, usecase.ErrForbidden):
-		return c.JSON(http.StatusForbidden, ErrRes{
-			Error:   "forbidden",
-			Message: "permission denied",
-		})
-
-	case errors.Is(err, usecase.ErrNotFound):
-		return c.JSON(http.StatusNotFound, ErrRes{
-			Error:   "not_found",
-			Message: "resource not found",
-		})
-
-	case errors.Is(err, usecase.ErrConflict):
-		return c.JSON(http.StatusConflict, ErrRes{
-			Error:   "conflict",
-			Message: "すでに登録されています。",
-		})
-
-	case errors.As(err, &rl):
-		c.Response().Header().Set("Retry-After", strconv.Itoa(rl.RetryAfterSec))
-		return c.JSON(http.StatusTooManyRequests, ErrRes{
-			Error:   "rate_limited",
-			Message: "too many requests",
-		})
-
-	default:
-		return c.JSON(http.StatusInternalServerError, ErrRes{
-			Error:   "internal",
-			Message: "internal server error",
-		})
-	}
+// refresh token用削除
+func clearRefreshCookie(
+	c echo.Context,
+	cookieName string,
+	secure bool,
+	sameSite http.SameSite,
+	path string,
+	domain string,
+) {
+	clearCookie(
+		c,
+		cookieName,
+		path,
+		domain,
+		true,
+		secure,
+		sameSite,
+	)
 }
