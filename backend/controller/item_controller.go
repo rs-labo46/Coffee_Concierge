@@ -2,7 +2,7 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
+	"time"
 
 	"coffee-spa/entity"
 	"coffee-spa/usecase"
@@ -11,36 +11,29 @@ import (
 )
 
 type ItemCtl struct {
-	uc usecase.ItemUsecase
+	uc usecase.ItemUC
 }
 
-func NewItemCtl(uc usecase.ItemUsecase) ItemCtl {
-	return ItemCtl{
+func NewItemCtl(uc usecase.ItemUC) *ItemCtl {
+	return &ItemCtl{
 		uc: uc,
 	}
 }
 
 // item作成入力。
-type AddItemReq struct {
-	Title       string  `json:"title"`
-	Summary     *string `json:"summary"`
-	Body        *string `json:"body"`
-	URL         *string `json:"url"`
-	ImageURL    *string `json:"image_url"`
-	Kind        string  `json:"kind"`
-	SourceID    int64   `json:"source_id"`
-	PublishedAt string  `json:"published_at"`
+type CreateItemReq struct {
+	Title       string          `json:"title"`
+	Summary     string          `json:"summary"`
+	URL         string          `json:"url"`
+	ImageURL    string          `json:"image_url"`
+	Kind        entity.ItemKind `json:"kind"`
+	SourceID    uint            `json:"source_id"`
+	PublishedAt time.Time       `json:"published_at"`
 }
 
 // item単体のレスポンス。
 type ItemRes struct {
 	Item entity.Item `json:"item"`
-}
-
-// item詳細レスポンス。
-type ItemDetailRes struct {
-	Item   entity.Item   `json:"item"`
-	Source entity.Source `json:"source"`
 }
 
 // item一覧のレスポンス。
@@ -56,46 +49,34 @@ type TopItemsRes struct {
 	Shop   []entity.Item `json:"shop"`
 }
 
-// GET /items/topを処理。
-func (ctl ItemCtl) Top(c echo.Context) error {
+// // item詳細レスポンス。
+// type ItemDetailRes struct {
+// 	Item   entity.Item   `json:"item"`
+// 	Source entity.Source `json:"source"`
+// }
+
+// GET /items/topを処理(query:limit)。
+func (ctl *ItemCtl) Top(c echo.Context) error {
 	limit, err := qInt(c, "limit", 3)
 	if err != nil {
 		return writeErr(c, err)
 	}
 
-	topItems, err := ctl.uc.Top(limit)
+	top, err := ctl.uc.Top(limit)
 	if err != nil {
 		return writeErr(c, err)
 	}
 
 	return c.JSON(http.StatusOK, TopItemsRes{
-		News:   topItems.News,
-		Recipe: topItems.Recipe,
-		Deal:   topItems.Deal,
-		Shop:   topItems.Shop,
+		News:   top.News,
+		Recipe: top.Recipe,
+		Deal:   top.Deal,
+		Shop:   top.Shop,
 	})
 }
 
-// GET /items/:idを処理。
-func (ctl ItemCtl) Detail(c echo.Context) error {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		return writeErr(c, usecase.ErrInvalidRequest)
-	}
-
-	item, err := ctl.uc.Get(id)
-	if err != nil {
-		return writeErr(c, err)
-	}
-
-	return c.JSON(http.StatusOK, ItemDetailRes{
-		Item:   item,
-		Source: item.Source,
-	})
-}
-
-// GET /itemsを処理。
-func (ctl ItemCtl) List(c echo.Context) error {
+// GET /itemsを処理(query: q,kind,limit,offset)。
+func (ctl *ItemCtl) List(c echo.Context) error {
 	limit, err := qInt(c, "limit", 20)
 	if err != nil {
 		return writeErr(c, err)
@@ -105,9 +86,9 @@ func (ctl ItemCtl) List(c echo.Context) error {
 		return writeErr(c, err)
 	}
 
-	items, err := ctl.uc.Search(usecase.ItemQ{
-		Q:      c.QueryParam("q"),
-		Kind:   c.QueryParam("kind"),
+	items, err := ctl.uc.List(entity.ItemQ{
+		Q:      qStr(c, "q"),
+		Kind:   entity.ItemKind(qStr(c, "kind")),
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -120,21 +101,21 @@ func (ctl ItemCtl) List(c echo.Context) error {
 	})
 }
 
-// POST /itemsを処理。
-// 認可はmiddleware側で行う。
+// POST /itemsを処理。管理者のみ
 func (ctl ItemCtl) Create(c echo.Context) error {
-	var req AddItemReq
+	var req CreateItemReq
 
-	if err := bindJSON(c, &req); err != nil {
+	actor, err := requireActor(c)
+	if err != nil {
 		return writeErr(c, err)
 	}
+	if err := c.Bind(&req); err != nil {
+		return writeErr(c, ErrInvalidRequest)
+	}
 
-	actor := actorFromCtx(c)
-
-	item, err := ctl.uc.Add(actor, usecase.AddItemIn{
+	item, err := ctl.uc.Create(*actor, usecase.CreateItemIn{
 		Title:       req.Title,
 		Summary:     req.Summary,
-		Body:        req.Body,
 		URL:         req.URL,
 		ImageURL:    req.ImageURL,
 		Kind:        req.Kind,
@@ -146,6 +127,21 @@ func (ctl ItemCtl) Create(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, ItemRes{
+		Item: item,
+	})
+}
+
+// GET /items/:idを処理
+func (ctl *ItemCtl) Get(c echo.Context) error {
+	id, err := pUint(c, "id")
+	if err != nil {
+		return writeErr(c, err)
+	}
+	item, err := ctl.uc.Get(id)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	return c.JSON(http.StatusOK, ItemRes{
 		Item: item,
 	})
 }
