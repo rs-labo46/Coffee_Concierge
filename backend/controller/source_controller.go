@@ -9,60 +9,91 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-type SrcCtl struct {
-	uc usecase.SourceUsecase
+// 依存先はusecase.SourceUCのみ
+type SourceCtl struct {
+	uc usecase.SourceUC
 }
 
-func NewSrcCtl(uc usecase.SourceUsecase) SrcCtl {
-	return SrcCtl{
+func NewSorceCtl(uc usecase.SourceUC) *SourceCtl {
+	return &SourceCtl{
 		uc: uc,
 	}
 }
 
-// source 作成入力。
-type AddSourceReq struct {
-	Name    string  `json:"name"`
-	SiteURL *string `json:"site_url"`
+// Source作成用のリクエストボディ
+type CreateSourceReq struct {
+	Name    string `json:"name"`
+	SiteURL string `json:"site_url"`
 }
 
-// source 単体レスポンス。
+// source単体レスポンス。
 type SourceRes struct {
 	Source entity.Source `json:"source"`
 }
 
-// source 一覧レスポンス。
+// source一覧レスポンス。
 type SourceListRes struct {
 	Sources []entity.Source `json:"sources"`
 }
 
-// GET /sources を処理。
-func (ctl SrcCtl) List(c echo.Context) error {
-	xs, err := ctl.uc.List()
+// GET /sources/:idを処理(path param idを読んで、usecaseを呼びsourceを返す)
+func (ctl *SourceCtl) Get(c echo.Context) error {
+	id, err := pUint(c, "id")
+	if err != nil {
+		return writeErr(c, err)
+	}
+	src, err := ctl.uc.Get(id)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	return c.JSON(http.StatusOK, SourceRes{
+		Source: src,
+	})
+}
+
+// GET /sourcesを処理(queryのlimitとoffset)。
+func (ctl *SourceCtl) List(c echo.Context) error {
+	limit, err := qInt(c, "limit", 20)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	offset, err := qInt(c, "offset", 0)
+	if err != nil {
+		return writeErr(c, err)
+	}
+
+	sources, err := ctl.uc.List(limit, offset)
 	if err != nil {
 		return writeErr(c, err)
 	}
 
 	return c.JSON(http.StatusOK, SourceListRes{
-		Sources: xs,
+		Sources: sources,
 	})
 }
 
-func (ctl SrcCtl) Create(c echo.Context) error {
-	var req AddSourceReq
-
-	if err := bindJSON(c, &req); err != nil {
+// POST /sourcesを処理(管理者のみ。actor取得->requestbodyをbind->usecaseをDTO->usecaseを呼ぶ->errまたは作成結果を返す)
+func (ctl *SourceCtl) Create(c echo.Context) error {
+	// 管理系endpoint = 認証済みactorを要求。
+	actor, err := requireActor(c)
+	if err != nil {
 		return writeErr(c, err)
 	}
 
-	src, err := ctl.uc.Add(actorFromCtx(c), usecase.AddSourceIn{
+	var req CreateSourceReq
+	if err := c.Bind(&req); err != nil {
+		return writeErr(c, ErrInvalidRequest)
+	}
+
+	src, err := ctl.uc.Create(*actor, usecase.CreateSourceIn{
 		Name:    req.Name,
 		SiteURL: req.SiteURL,
 	})
 	if err != nil {
 		return writeErr(c, err)
 	}
-
 	return c.JSON(http.StatusCreated, SourceRes{
 		Source: src,
 	})
+
 }
