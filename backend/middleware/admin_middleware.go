@@ -1,17 +1,28 @@
 package middleware
 
-import "github.com/labstack/echo/v4"
+import (
+	"coffee-spa/entity"
 
-// role=adminのみ通す。
-// roleの不一致は403。
-func AdminOnly() echo.MiddlewareFunc {
+	"github.com/labstack/echo/v4"
+)
+
+// actor.role=adminのみ通す。
+func RequireAdmin() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			role, _ := c.Get("role").(string)
-			if role != "admin" {
+			v := c.Get("actor")
+			if v == nil {
 				return writeForbidden(c)
 			}
 
+			actor, ok := v.(*entity.Actor)
+			if !ok || actor == nil {
+				return writeForbidden(c)
+			}
+
+			if actor.Role != entity.RoleAdmin {
+				return writeForbidden(c)
+			}
 			return next(c)
 		}
 	}
