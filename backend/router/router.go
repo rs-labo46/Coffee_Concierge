@@ -41,7 +41,7 @@ func New(
 	//csrf required
 	//refreshはcookie+csrfが必要
 	csrf := e.Group("")
-	csrf.Use(middleware.CSRF())
+	csrf.Use(middleware.CsrfCheck())
 	csrf.Use(middleware.RequireRefreshCookie())
 	csrf.POST("/auth/refresh", authCtl.Refresh)
 
@@ -56,7 +56,7 @@ func New(
 	admin := e.Group("")
 	admin.Use(middleware.JWTAuth(jwtSecret))
 	admin.Use(middleware.TokenVersion(userRepo))
-	admin.Use(middleware.AdminOnly())
+	admin.Use(middleware.RequireAdmin())
 	admin.POST("/items", itemCtl.Create)
 	admin.POST("/sources", srcCtl.Create)
 }
