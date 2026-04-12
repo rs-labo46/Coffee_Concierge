@@ -55,7 +55,7 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 			}
 
 			claims, ok := token.Claims.(*accessClaims)
-			if !ok {
+			if !ok || claims == nil {
 				return writeUnauthorized(c)
 			}
 			if claims.Subject == "" || claims.Role == "" {
