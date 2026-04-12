@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"coffee-spa/entity"
 	"coffee-spa/repository"
 	"errors"
 	"strconv"
@@ -57,22 +58,28 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 			if !ok {
 				return writeUnauthorized(c)
 			}
-
-			if claims.Subject == "" {
-				return writeUnauthorized(c)
-			}
-			if claims.Role == "" {
+			if claims.Subject == "" || claims.Role == "" {
 				return writeUnauthorized(c)
 			}
 
-			userID, err := strconv.ParseInt(claims.Subject, 10, 64)
-			if err != nil || userID <= 0 {
+			id64, err := strconv.ParseUint(claims.Subject, 10, 64)
+			if err != nil || id64 == 0 {
 				return writeUnauthorized(c)
+			}
+
+			userID := uint(id64)
+			role := entity.Role(claims.Role)
+
+			actor := &entity.Actor{
+				UserID:   userID,
+				Role:     role,
+				TokenVer: claims.TV,
 			}
 
 			c.Set("user_id", userID)
 			c.Set("role", claims.Role)
 			c.Set("tv", claims.TV)
+			c.Set("actor", actor)
 
 			return next(c)
 		}

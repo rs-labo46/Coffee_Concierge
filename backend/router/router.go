@@ -27,6 +27,7 @@ func New(
 
 	//public
 	pub := e.Group("")
+	pub.GET("/auth/csrf", authCtl.Csrf)
 	pub.POST("/auth/signup", authCtl.Signup)
 	pub.POST("/auth/verify-email", authCtl.VerifyEmail)
 	pub.POST("/auth/login", authCtl.Login)

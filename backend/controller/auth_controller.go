@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"os"
 	"strings"
@@ -17,6 +19,12 @@ const (
 
 	// refresh tokenをのせるcookieのpath。refresh/logoutなど認証でcookieを使う。
 	refreshCookiePath = "/auth"
+
+	// csrf tokenを保存するcookie。
+	csrfCookieName = "csrf_token"
+
+	// csrf tokenをのせるcookieのpath。
+	csrfCookiePath = "/auth"
 )
 
 // 認証系HTTPendpointの入口で、依存先はusecase.AuthUCのみ。
@@ -82,6 +90,35 @@ type AuthRes struct {
 // /meのレスポンス。
 type MeRes struct {
 	User AuthUserRes `json:"user"`
+}
+
+type CsrfRes struct {
+	Token string `json:"token"`
+}
+
+// GET /auth/csrf
+// 未認証・認証済みを問わずcsrf tokenを出す。
+// cookieとresponse bodyの両方に同じtokenを返す。
+func (ctl *AuthCtl) Csrf(c echo.Context) error {
+	token, err := newCSRFToken()
+	if err != nil {
+		return writeErr(c, err)
+	}
+
+	c.SetCookie(&http.Cookie{
+		Name:     csrfCookieName,
+		Value:    token,
+		Path:     csrfCookiePath,
+		MaxAge:   authCSRFCookieMaxAgeSec(),
+		HttpOnly: false,
+		Secure:   authCookieSecure(),
+		SameSite: http.SameSiteLaxMode,
+		Domain:   authCookieDomain(),
+	})
+
+	return c.JSON(http.StatusOK, CsrfRes{
+		Token: token,
+	})
 }
 
 // POST /auth/signup
@@ -165,7 +202,7 @@ func (ctl *AuthCtl) Login(c echo.Context) error {
 // POST /auth/refresh
 // cookieのrefresh tokenを使う。
 func (ctl *AuthCtl) Refresh(c echo.Context) error {
-	// cookie から refresh token を取ります。
+	// cookieからrefresh tokenを取る。
 	refreshToken := cookieValue(c, refreshCookieName)
 
 	out, err := ctl.uc.Refresh(usecase.RefreshIn{
@@ -300,6 +337,21 @@ func toAuthUserRes(u entity.User) AuthUserRes {
 		TokenVer:      u.TokenVer,
 		EmailVerified: u.EmailVerified,
 	}
+}
+
+// csrf token用のランダム値を生成。
+func newCSRFToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(b), nil
+}
+
+// csrf cookieのMaxAge秒数。
+func authCSRFCookieMaxAgeSec() int {
+	return 24 * 60 * 60
 }
 
 // refresh cookieにSecureを付けるかを返す。
