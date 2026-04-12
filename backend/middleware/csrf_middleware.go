@@ -6,13 +6,18 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// CSRFはDouble Submit Cookieを検証。
+const (
+	csrfCookieName = "csrf_token"
+	csrfHeaderName = "X-CSRF-Token"
+)
+
+// Double Submit Cookieを検証。
 // cookie csrf_token と header X-CSRF-Token が両方存在し、かつ一致する必要がある。
-func CSRF() echo.MiddlewareFunc {
+func CsrfCheck() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			csrfCookie, err := c.Cookie("csrf_token")
-			if err != nil {
+			csrfCookie, err := c.Cookie(csrfCookieName)
+			if err != nil || csrfCookie == nil {
 				return writeCSRFMismatch(c)
 			}
 
@@ -21,7 +26,7 @@ func CSRF() echo.MiddlewareFunc {
 				return writeCSRFMismatch(c)
 			}
 
-			headerVal := strings.TrimSpace(c.Request().Header.Get("X-CSRF-Token"))
+			headerVal := strings.TrimSpace(c.Request().Header.Get(csrfHeaderName))
 			if headerVal == "" {
 				return writeCSRFMismatch(c)
 			}
