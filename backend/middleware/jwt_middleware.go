@@ -84,7 +84,7 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 func TokenVersion(userRepo repository.UserRepository) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			userID, ok := c.Get("user_id").(int64)
+			userID, ok := c.Get("user_id").(uint)
 			if !ok || userID <= 0 {
 				return writeUnauthorized(c)
 			}

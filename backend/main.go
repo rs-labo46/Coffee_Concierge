@@ -108,14 +108,14 @@ func main() {
 	healthCtl := controller.NewHealthCtl(healthUC)
 	authCtl := controller.NewAuthCtl(authUC)
 	itemCtl := controller.NewItemCtl(itemUC)
-	srcCtl := controller.NewSrcCtl(sourceUC)
+	sourceCtl := controller.NewSourceCtl(sourceUC)
 
 	router.New(
 		e,
 		healthCtl,
 		authCtl,
 		itemCtl,
-		srcCtl,
+		sourceCtl,
 		c.JWTSecret,
 		userRepo,
 		c.FEURL,

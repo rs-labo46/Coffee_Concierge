@@ -37,14 +37,15 @@ func (v *sourceValidator) Create(in usecase.CreateSourceIn) error {
 // Source詳細取得時のidを検証。
 func (v *sourceValidator) Get(id uint) error {
 	return validation.Validate(id,
-		// id は1以上。
+		// idは1以上。
 		validation.Min(uint(1)).Error("id must be greater than 0"),
 	)
 }
 
 // Source 一覧取得時のlimit / offsetを検証。
 func (v *sourceValidator) List(limit int, offset int) error {
-	return validation.ValidateStruct(&struct {
+
+	in := struct {
 		// Limitは取得件数。
 		Limit int
 		// Offsetは読み飛ばし件数。
@@ -52,17 +53,17 @@ func (v *sourceValidator) List(limit int, offset int) error {
 	}{
 		Limit:  limit,
 		Offset: offset,
-	},
-		// limitは最低1、最大50。
+	}
+	// limitは最低1、最大50。
+	return validation.ValidateStruct(&in,
 		validation.Field(
-			&limit,
+			&in.Limit,
 			validation.Required,
 			validation.Min(1).Error("limit must be at least 1"),
 			validation.Max(50).Error("limit must be at most 50"),
 		),
-		// offsetは0以上。
 		validation.Field(
-			&offset,
+			&in.Offset,
 			validation.Min(0).Error("offset must be 0 or more"),
 		),
 	)

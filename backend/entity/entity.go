@@ -143,6 +143,10 @@ type Rt struct {
 	CreatedAt    time.Time  `gorm:"column:created_at;not null;autoCreateTime" json:"created_at"`
 }
 
+func (Rt) TableName() string {
+	return "refresh_tokens"
+}
+
 // Source は sourcesテーブルに対応する情報源(出典、ブランド、店舗などの元情報)。
 type Source struct {
 	ID        uint      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`

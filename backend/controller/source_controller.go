@@ -14,7 +14,7 @@ type SourceCtl struct {
 	uc usecase.SourceUC
 }
 
-func NewSorceCtl(uc usecase.SourceUC) *SourceCtl {
+func NewSourceCtl(uc usecase.SourceUC) *SourceCtl {
 	return &SourceCtl{
 		uc: uc,
 	}

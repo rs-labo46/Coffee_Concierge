@@ -11,9 +11,9 @@ import (
 func New(
 	e *echo.Echo,
 	healthCtl controller.HealthCtl,
-	authCtl controller.AuthCtl,
-	itemCtl controller.ItemCtl,
-	srcCtl controller.SrcCtl,
+	authCtl *controller.AuthCtl,
+	itemCtl *controller.ItemCtl,
+	srcCtl *controller.SourceCtl,
 	jwtSecret string,
 	userRepo repository.UserRepository,
 	feURL string,
@@ -29,12 +29,11 @@ func New(
 	pub := e.Group("")
 	pub.POST("/auth/signup", authCtl.Signup)
 	pub.POST("/auth/verify-email", authCtl.VerifyEmail)
-	pub.POST("/auth/resend-verify", authCtl.ResendVerify)
 	pub.POST("/auth/login", authCtl.Login)
 	pub.POST("/auth/password/forgot", authCtl.ForgotPw)
 	pub.POST("/auth/password/reset", authCtl.ResetPw)
 	pub.GET("/items/top", itemCtl.Top)
-	pub.GET("/items/:id", itemCtl.Detail)
+	pub.GET("/items/:id", itemCtl.Get)
 	pub.GET("/items", itemCtl.List)
 	pub.GET("/sources", srcCtl.List)
 
