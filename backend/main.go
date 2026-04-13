@@ -65,6 +65,60 @@ func main() {
 	itemRepo := repository.NewItemRepository(d.G)
 	auditRepo := repository.NewAuditRepository(d.G)
 
+	rlStore := repository.NewRateLimitStore(rdb)
+	signupIPRule := usecase.RateRule{
+		Rate:     0.1,
+		Capacity: 3,
+		Cost:     1,
+	}
+	loginIPRule := usecase.RateRule{
+		Rate:     0.2,
+		Capacity: 10,
+		Cost:     1,
+	}
+	loginMailRule := usecase.RateRule{
+		Rate:     0.1,
+		Capacity: 5,
+		Cost:     1,
+	}
+	refreshUIDRule := usecase.RateRule{
+		Rate:     0.2,
+		Capacity: 5,
+		Cost:     1,
+	}
+	resendIPRule := usecase.RateRule{
+		Rate:     0.05,
+		Capacity: 2,
+		Cost:     1,
+	}
+	resendMailRule := usecase.RateRule{
+		Rate:     0.05,
+		Capacity: 2,
+		Cost:     1,
+	}
+	forgotIPRule := usecase.RateRule{
+		Rate:     0.05,
+		Capacity: 3,
+		Cost:     1,
+	}
+	forgotMailRule := usecase.RateRule{
+		Rate:     0.05,
+		Capacity: 3,
+		Cost:     1,
+	}
+
+	rlUC := usecase.NewRateLimitUC(
+		rlStore,
+		signupIPRule,
+		loginIPRule,
+		loginMailRule,
+		refreshUIDRule,
+		resendIPRule,
+		resendMailRule,
+		forgotIPRule,
+		forgotMailRule,
+	)
+
 	authVal := validator.NewAuthValidator()
 	itemVal := validator.NewItemValidator()
 	sourceVal := validator.NewSourceValidator()
@@ -106,7 +160,7 @@ func main() {
 	)
 
 	healthCtl := controller.NewHealthCtl(healthUC)
-	authCtl := controller.NewAuthCtl(authUC)
+	authCtl := controller.NewAuthCtl(authUC, rlUC)
 	itemCtl := controller.NewItemCtl(itemUC)
 	sourceCtl := controller.NewSourceCtl(sourceUC)
 

@@ -5,18 +5,28 @@ import (
 	"time"
 )
 
-// ratelimit1件分のルール
+// Token Bucket1件分のルール
 type RateRule struct {
-	Limit  int64
-	Window time.Duration
+	Rate     float64
+	Capacity float64
+	Cost     float64
 }
 
+// usecaseはRedisの実装を知らず、repositoryに依存する。
 type RateLimitStore interface {
-	Hit(key string, windowSec int64) (count int64, ttlSec int64, err error)
+	Allow(
+		key string,
+		rate float64,
+		capacity float64,
+		cost float64,
+		now time.Time,
+	) (allowed bool, retryAfterSec int, err error)
 }
 
+// controllerやmiddlewareから見たusecaseの入口でどの種類の制限かを表す。
 type RateLimiter interface {
 	AllowSignup(ip string) (bool, int, error)
+	AllowLoginIP(ip string) (bool, int, error)
 	AllowLogin(emailHash string) (bool, int, error)
 	AllowRefresh(userID int64) (bool, int, error)
 	AllowResendIP(ip string) (bool, int, error)
@@ -26,19 +36,34 @@ type RateLimiter interface {
 }
 
 type RateLimitUC struct {
-	store      RateLimitStore
-	signupIP   RateRule
-	loginMail  RateRule
+	// usecaseは実装詳細を持たず、Allowだけ呼ぶ。
+	store RateLimitStore
+	// signupをIPで制限するためのルール。
+	signupIP RateRule
+	// loginをemailで制限するためのルール。
+	loginIP   RateRule
+	loginMail RateRule
+	// refreshをuserIDで制限するためのルール。
 	refreshUID RateRule
-	resendIP   RateRule
+
+	// verify再送をIPで制限するためのルール。
+	resendIP RateRule
+
+	// verify再送をemailで制限するためのルール。
 	resendMail RateRule
-	forgotIP   RateRule
+
+	// forgot passwordをIPで制限するためのルール。
+	forgotIP RateRule
+
+	// forgot passwordをemailで制限するためのルール。
 	forgotMail RateRule
 }
 
+// rate limitのusecaseを生成する。
 func NewRateLimitUC(
 	store RateLimitStore,
 	signupIP RateRule,
+	loginIP RateRule,
 	loginMail RateRule,
 	refreshUID RateRule,
 	resendIP RateRule,
@@ -49,6 +74,7 @@ func NewRateLimitUC(
 	return &RateLimitUC{
 		store:      store,
 		signupIP:   signupIP,
+		loginIP:    loginIP,
 		loginMail:  loginMail,
 		refreshUID: refreshUID,
 		resendIP:   resendIP,
@@ -58,48 +84,84 @@ func NewRateLimitUC(
 	}
 }
 
+// 判定単位はIP。
 func (u *RateLimitUC) AllowSignup(ip string) (bool, int, error) {
 	return u.allow("rl:signup:ip:"+ip, u.signupIP)
 }
 
+// loginの1段目。IP単位
+func (u *RateLimitUC) AllowLoginIP(ip string) (bool, int, error) {
+	return u.allow("rl:login:ip:"+ip, u.loginIP)
+}
+
+// 判定単位はemail側(emailのhash)。
 func (u *RateLimitUC) AllowLogin(emailHash string) (bool, int, error) {
 	return u.allow("rl:login:mail:"+emailHash, u.loginMail)
 }
 
+// 判定単位はuserID。
 func (u *RateLimitUC) AllowRefresh(userID int64) (bool, int, error) {
 	return u.allow(fmt.Sprintf("rl:refresh:uid:%d", userID), u.refreshUID)
 }
 
+// 判定単位はIP。
 func (u *RateLimitUC) AllowResendIP(ip string) (bool, int, error) {
 	return u.allow("rl:resend:ip:"+ip, u.resendIP)
 }
 
+// 判定単位はemail
 func (u *RateLimitUC) AllowResendMail(emailHash string) (bool, int, error) {
 	return u.allow("rl:resend:mail:"+emailHash, u.resendMail)
 }
 
+// 判定単位はIP。
 func (u *RateLimitUC) AllowForgotIP(ip string) (bool, int, error) {
 	return u.allow("rl:forgot:ip:"+ip, u.forgotIP)
 }
 
+// 判定単位はemail
 func (u *RateLimitUC) AllowForgotMail(emailHash string) (bool, int, error) {
 	return u.allow("rl:forgot:mail:"+emailHash, u.forgotMail)
 }
 
+// allow は共通処理。
 func (u *RateLimitUC) allow(key string, rule RateRule) (bool, int, error) {
-	sec := int64(rule.Window / time.Second)
-	if sec <= 0 {
-		sec = 1
+	if u == nil || u.store == nil {
+		return false, 0, fmt.Errorf("rate limit store is nil")
 	}
 
-	count, ttl, err := u.store.Hit(key, sec)
+	if key == "" {
+		return false, 0, fmt.Errorf("rate limit key is empty")
+	}
+
+	// ルール値が壊れていたらToken Bucketとして成立しないから、エラー。
+	if rule.Rate <= 0 {
+		return false, 0, fmt.Errorf("invalid rule rate")
+	}
+	if rule.Capacity <= 0 {
+		return false, 0, fmt.Errorf("invalid rule capacity")
+	}
+	if rule.Cost <= 0 {
+		return false, 0, fmt.Errorf("invalid rule cost")
+	}
+
+	// このkeyに、このruleを当てる
+	allowed, retryAfterSec, err := u.store.Allow(
+		key,
+		rule.Rate,
+		rule.Capacity,
+		rule.Cost,
+		time.Now(),
+	)
 	if err != nil {
 		return false, 0, err
 	}
 
-	if count <= rule.Limit {
+	// 許可されたならretryAfterは不要なため0を返す。
+	if allowed {
 		return true, 0, nil
 	}
 
-	return false, int(ttl), nil
+	// 拒否された場合は何秒後に再試行すべきかを返す。
+	return false, retryAfterSec, nil
 }

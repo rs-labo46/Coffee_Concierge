@@ -2,9 +2,11 @@ package controller
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"coffee-spa/entity"
@@ -30,12 +32,14 @@ const (
 // 認証系HTTPendpointの入口で、依存先はusecase.AuthUCのみ。
 type AuthCtl struct {
 	uc usecase.AuthUC
+	rl usecase.RateLimiter
 }
 
 // AuthCtlを生成。
-func NewAuthCtl(uc usecase.AuthUC) *AuthCtl {
+func NewAuthCtl(uc usecase.AuthUC, rl usecase.RateLimiter) *AuthCtl {
 	return &AuthCtl{
 		uc: uc,
+		rl: rl,
 	}
 }
 
@@ -130,6 +134,14 @@ func (ctl *AuthCtl) Signup(c echo.Context) error {
 		return writeErr(c, ErrInvalidRequest)
 	}
 
+	allowed, retryAfterSec, err := ctl.rl.AllowSignup(clientIP(c))
+	if err != nil {
+		return writeErr(c, err)
+	}
+	if !allowed {
+		return writeRateLimited(c, retryAfterSec)
+	}
+
 	out, err := ctl.uc.Signup(usecase.SignupIn{
 		Email:    req.Email,
 		Password: req.Password,
@@ -171,11 +183,33 @@ func (ctl *AuthCtl) Login(c echo.Context) error {
 		return writeErr(c, ErrInvalidRequest)
 	}
 
+	ip := clientIP(c)
+
+	// 1:IP単位の制限。
+	allowed, retryAfterSec, err := ctl.rl.AllowLoginIP(ip)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	if !allowed {
+		return writeRateLimited(c, retryAfterSec)
+	}
+
+	// 2:email単位の制限。
+	emailHash := hashEmailForRateLimit(req.Email)
+
+	allowed, retryAfterSec, err = ctl.rl.AllowLogin(emailHash)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	if !allowed {
+		return writeRateLimited(c, retryAfterSec)
+	}
+
 	out, err := ctl.uc.Login(usecase.LoginIn{
 		Email:    req.Email,
 		Password: req.Password,
 		UA:       userAgent(c),
-		IP:       clientIP(c),
+		IP:       ip,
 	})
 	if err != nil {
 		return writeErr(c, err)
@@ -368,4 +402,23 @@ func authCookieDomain() string {
 // refresh cookieのMaxAge秒数。
 func authRefreshCookieMaxAgeSec() int {
 	return 24 * 60 * 60
+}
+
+// rate limit超過時のレスポンスを返す。
+// Retry-Afterが1以上ならheaderにも載せる。
+func writeRateLimited(c echo.Context, retryAfterSec int) error {
+	if retryAfterSec > 0 {
+		c.Response().Header().Set("Retry-After", strconv.Itoa(retryAfterSec))
+	}
+
+	return c.JSON(http.StatusTooManyRequests, map[string]string{
+		"error": "rate_limited",
+	})
+}
+
+// loginでemailをそのままRedisキーへ使わないよう、正規化してハッシュ化。
+func hashEmailForRateLimit(email string) string {
+	v := strings.ToLower(strings.TrimSpace(email))
+	sum := sha256.Sum256([]byte(v))
+	return hex.EncodeToString(sum[:])
 }

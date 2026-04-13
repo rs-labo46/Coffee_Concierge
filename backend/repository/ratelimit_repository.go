@@ -3,7 +3,10 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"strconv"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -12,23 +15,69 @@ type RateLimitStore struct {
 	rdb *redis.Client
 }
 
-// 1. KEYS[1]の値をINCR
-// 2. 初回作成時だけEXPIREを設定
-// 3. 現在のTTLを取得
-// 4. TTLが不正値ならwindowSec
-// 5. {current, ttl}を返す
-var hitScript = redis.NewScript(`
-local current = redis.call("INCR", KEYS[1])
-if current == 1 then
-  redis.call("EXPIRE", KEYS[1], ARGV[1])
+var allowScript = redis.NewScript(`
+local key = KEYS[1]
+
+local rate = tonumber(ARGV[1])
+local capacity = tonumber(ARGV[2])
+local cost = tonumber(ARGV[3])
+local now = tonumber(ARGV[4])
+local ttl = tonumber(ARGV[5])
+
+if not rate or rate <= 0 then
+	return redis.error_reply("invalid rate")
+end
+if not capacity or capacity <= 0 then
+	return redis.error_reply("invalid capacity")
+end
+if not cost or cost <= 0 then
+	return redis.error_reply("invalid cost")
+end
+if not now or now < 0 then
+	return redis.error_reply("invalid now")
+end
+if not ttl or ttl <= 0 then
+	return redis.error_reply("invalid ttl")
 end
 
-local ttl = redis.call("TTL", KEYS[1])
-if ttl < 0 then
-  ttl = tonumber(ARGV[1])
+local vals = redis.call("HMGET", key, "tokens", "ts")
+local tokens = tonumber(vals[1])
+local ts = tonumber(vals[2])
+
+if not tokens then
+	tokens = capacity
+end
+if not ts then
+	ts = now
 end
 
-return {current, ttl}
+local elapsed = now - ts
+if elapsed < 0 then
+	elapsed = 0
+end
+
+tokens = math.min(capacity, tokens + (elapsed * rate))
+
+local allowed = 0
+local retry_after = 0
+
+if tokens >= cost then
+	tokens = tokens - cost
+	allowed = 1
+else
+	local deficit = cost - tokens
+	retry_after = math.ceil(deficit / rate)
+end
+
+redis.call("HSET", key, "tokens", tostring(tokens), "ts", tostring(now))
+redis.call("EXPIRE", key, ttl)
+
+local remaining = math.floor(tokens)
+if remaining < 0 then
+	remaining = 0
+end
+
+return {allowed, remaining, retry_after}
 `)
 
 // RateLimitStoreを生成。
@@ -38,50 +87,67 @@ func NewRateLimitStore(rdb *redis.Client) *RateLimitStore {
 	}
 }
 
-// keyに対して1回分のアクセスを記録。
-// count: 現在の窓内hit回数
-// ttl: 窓が切れるまでの残り秒数
-func (r *RateLimitStore) Hit(key string, windowSec int64) (int64, int64, error) {
+// AllowのtokenBucket方式
+func (r *RateLimitStore) Allow(
+	key string,
+	rate float64,
+	capacity float64,
+	cost float64,
+	now time.Time,
+) (bool, int, error) {
 	if r == nil || r.rdb == nil {
-		return 0, 0, errors.New("redis client is nil")
+		return false, 0, errors.New("redis client is nil")
+	}
+	if key == "" {
+		return false, 0, errors.New("key is empty")
+	}
+	if rate <= 0 {
+		return false, 0, errors.New("invalid rate")
+	}
+	if capacity <= 0 {
+		return false, 0, errors.New("invalid capacity")
+	}
+	if cost <= 0 {
+		return false, 0, errors.New("invalid cost")
 	}
 
-	// 窓秒数は正の値。
-	if windowSec <= 0 {
-		return 0, 0, errors.New("invalid window sec")
+	drainSec := int64(math.Ceil(capacity / rate))
+	if drainSec <= 0 {
+		drainSec = 1
 	}
-
-	// LuaスクリプトをRedis上で実行。
-	// KEYS[1]にrate limit用キー、ARGV[1]にwindow 秒数を渡す。
-	luaRes, err := hitScript.Run(
+	ttlSec := drainSec * 2
+	if ttlSec <= 0 {
+		ttlSec = 1
+	}
+	luaRes, err := allowScript.Run(
 		context.Background(),
 		r.rdb,
 		[]string{key},
-		windowSec,
+		fmt.Sprintf("%.6f", rate),
+		fmt.Sprintf("%.6f", capacity),
+		fmt.Sprintf("%.6f", cost),
+		now.Unix(),
+		ttlSec,
 	).Result()
 	if err != nil {
-		return 0, 0, err
+		return false, 0, err
 	}
 
-	// 戻り値は[count, ttl]の2要素配列。
 	xs, ok := luaRes.([]interface{})
-	if !ok || len(xs) != 2 {
-		return 0, 0, errors.New("invalid lua result")
+	if !ok || len(xs) != 3 {
+		return false, 0, errors.New("invalid lua result")
 	}
 
-	// 1要素目をcountとしてint64に変換。
-	count, err := toInt64(xs[0])
+	allowedInt, err := toInt64(xs[0])
 	if err != nil {
-		return 0, 0, err
+		return false, 0, err
 	}
-
-	// 2要素目をttlとしてint64に変換。
-	ttl, err := toInt64(xs[1])
+	retryAfterSec, err := toInt(xs[2])
 	if err != nil {
-		return 0, 0, err
+		return false, 0, err
 	}
 
-	return count, ttl, nil
+	return allowedInt == 1, retryAfterSec, nil
 }
 
 // toInt64はLuaから返る値をint64に変換。
@@ -91,6 +157,26 @@ func toInt64(v interface{}) (int64, error) {
 		return x, nil
 	case string:
 		return strconv.ParseInt(x, 10, 64)
+	default:
+		return 0, errors.New("invalid lua value")
+	}
+}
+
+// Luaの戻り値をintに変換
+func toInt(v interface{}) (int, error) {
+	switch x := v.(type) {
+	case int:
+		return x, nil
+	case int64:
+		return int(x), nil
+	case float64:
+		return int(x), nil
+	case string:
+		n, err := strconv.Atoi(x)
+		if err != nil {
+			return 0, err
+		}
+		return n, nil
 	default:
 		return 0, errors.New("invalid lua value")
 	}
