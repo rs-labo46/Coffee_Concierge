@@ -33,6 +33,7 @@ func New(
 	pub.POST("/auth/login", authCtl.Login)
 	pub.POST("/auth/password/forgot", authCtl.ForgotPw)
 	pub.POST("/auth/password/reset", authCtl.ResetPw)
+	pub.POST("/auth/verify-email/resend", authCtl.ResendVerify)
 	pub.GET("/items/top", itemCtl.Top)
 	pub.GET("/items/:id", itemCtl.Get)
 	pub.GET("/items", itemCtl.List)

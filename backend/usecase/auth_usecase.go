@@ -17,6 +17,7 @@ type AuthUC interface {
 	VerifyEmail(in VerifyEmailIn) error
 	Login(in LoginIn) (LoginOut, error)
 	Refresh(in RefreshIn) (RefreshOut, error)
+	ResendVerify(in ResendVerifyIn) error
 	Logout(actor entity.Actor, refreshToken string) error
 	ForgotPw(in ForgotPwIn) error
 	ResetPw(in ResetPwIn) error
@@ -77,6 +78,11 @@ type ForgotPwIn struct {
 type ResetPwIn struct {
 	Token    string
 	Password string
+}
+
+// 認証メール再送入力。
+type ResendVerifyIn struct {
+	Email string
 }
 
 // password hash / compare。
@@ -507,13 +513,12 @@ func (u *authUsecase) Logout(actor entity.Actor, refreshToken string) error {
 }
 
 // 再設定tokenを発行する。
+// 再設定tokenを発行する。
 func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
-	if err := u.val.Token(in.Email); err != nil {
-	}
-
 	user, err := u.users.GetByEmail(in.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
+			// 存在有無は外に漏らさない。
 			return nil
 		}
 		return err
@@ -550,6 +555,66 @@ func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
 		if err := u.mailer.SendResetPwEmail(user.Email, resetPlain); err != nil {
 			u.writeAudit(
 				"auth.password.forgot.mail_failed",
+				&user.ID,
+				"",
+				"",
+				map[string]string{
+					"user_id": uintToStr(user.ID),
+					"email":   user.Email,
+				},
+			)
+		}
+	}
+
+	return nil
+}
+
+// 認証メールを再送する。
+func (u *authUsecase) ResendVerify(in ResendVerifyIn) error {
+	user, err := u.users.GetByEmail(in.Email)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			// 存在有無は外に漏らさない。
+			return nil
+		}
+		return err
+	}
+
+	// すでに認証済みでも存在有無を曖昧に返す。
+	if user.EmailVerified {
+		return nil
+	}
+
+	now := u.clock.Now()
+	verifyPlain := u.idGen.New()
+	verifyHash := hashToken(verifyPlain)
+
+	verify := &entity.EmailVerify{
+		UserID:    user.ID,
+		TokenHash: verifyHash,
+		ExpiresAt: now.Add(u.verifyTTL),
+		UsedAt:    nil,
+	}
+
+	if err := u.verifies.Create(verify); err != nil {
+		return err
+	}
+
+	u.writeAudit(
+		"auth.verify_email.resend",
+		&user.ID,
+		"",
+		"",
+		map[string]string{
+			"user_id": uintToStr(user.ID),
+			"email":   user.Email,
+		},
+	)
+
+	if u.mailer != nil {
+		if err := u.mailer.SendVerifyEmail(user.Email, verifyPlain); err != nil {
+			u.writeAudit(
+				"auth.verify_email.resend.mail_failed",
 				&user.ID,
 				"",
 				"",

@@ -54,6 +54,11 @@ type VerifyEmailReq struct {
 	Token string `json:"token"`
 }
 
+// verify mail再送のrequest body 。
+type ResendVerifyReq struct {
+	Email string `json:"email"`
+}
+
 // loginのrequest body 。
 type LoginReq struct {
 	Email    string `json:"email"`
@@ -172,6 +177,48 @@ func (ctl *AuthCtl) VerifyEmail(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, MsgRes{
 		Message: "email verified",
+	})
+}
+
+// POST /auth/verify-email/resend
+func (ctl *AuthCtl) ResendVerify(c echo.Context) error {
+	var req ResendVerifyReq
+
+	if err := c.Bind(&req); err != nil {
+		return writeErr(c, ErrInvalidRequest)
+	}
+
+	ip := clientIP(c)
+
+	// 1段目: IP 単位の制限。
+	allowed, retryAfterSec, err := ctl.rl.AllowResendIP(ip)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	if !allowed {
+		return writeRateLimited(c, retryAfterSec)
+	}
+
+	// 2段目: email 単位の制限。
+	emailHash := hashEmailForRateLimit(req.Email)
+
+	allowed, retryAfterSec, err = ctl.rl.AllowResendMail(emailHash)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	if !allowed {
+		return writeRateLimited(c, retryAfterSec)
+	}
+
+	err = ctl.uc.ResendVerify(usecase.ResendVerifyIn{
+		Email: req.Email,
+	})
+	if err != nil {
+		return writeErr(c, err)
+	}
+
+	return c.JSON(http.StatusOK, MsgRes{
+		Message: "if the email exists, a verify mail has been sent",
 	})
 }
 
@@ -310,12 +357,34 @@ func (ctl *AuthCtl) Logout(c echo.Context) error {
 func (ctl *AuthCtl) ForgotPw(c echo.Context) error {
 	var req ForgotPwReq
 
-	// request body の bind 失敗は invalid_request 。
+	// request bodyのbind失敗はinvalid_request 。
 	if err := c.Bind(&req); err != nil {
 		return writeErr(c, ErrInvalidRequest)
 	}
 
-	err := ctl.uc.ForgotPw(usecase.ForgotPwIn{
+	ip := clientIP(c)
+	// 1:IP。
+	allowed, retryAfterSec, err := ctl.rl.AllowForgotIP(ip)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	if !allowed {
+		return writeRateLimited(c, retryAfterSec)
+	}
+
+	// 2:email
+	// emailの生値はRedisキーに使わず、hash化してから使う。
+	emailHash := hashEmailForRateLimit(req.Email)
+
+	allowed, retryAfterSec, err = ctl.rl.AllowForgotMail(emailHash)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	if !allowed {
+		return writeRateLimited(c, retryAfterSec)
+	}
+
+	err = ctl.uc.ForgotPw(usecase.ForgotPwIn{
 		Email: req.Email,
 	})
 	if err != nil {
