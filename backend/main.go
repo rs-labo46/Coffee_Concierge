@@ -81,7 +81,7 @@ func main() {
 		Capacity: 5,
 		Cost:     1,
 	}
-	refreshUIDRule := usecase.RateRule{
+	refreshTokenRule := usecase.RateRule{
 		Rate:     0.2,
 		Capacity: 5,
 		Cost:     1,
@@ -112,7 +112,7 @@ func main() {
 		signupIPRule,
 		loginIPRule,
 		loginMailRule,
-		refreshUIDRule,
+		refreshTokenRule,
 		resendIPRule,
 		resendMailRule,
 		forgotIPRule,

@@ -238,6 +238,15 @@ func (ctl *AuthCtl) Login(c echo.Context) error {
 func (ctl *AuthCtl) Refresh(c echo.Context) error {
 	// cookieからrefresh tokenを取る。
 	refreshToken := cookieValue(c, refreshCookieName)
+	refreshTokenHash := hashTokenForRateLimit(refreshToken)
+
+	allowed, retryAfterSec, err := ctl.rl.AllowRefreshToken(refreshTokenHash)
+	if err != nil {
+		return writeErr(c, err)
+	}
+	if !allowed {
+		return writeRateLimited(c, retryAfterSec)
+	}
 
 	out, err := ctl.uc.Refresh(usecase.RefreshIn{
 		RefreshToken: refreshToken,
@@ -419,6 +428,13 @@ func writeRateLimited(c echo.Context, retryAfterSec int) error {
 // loginでemailをそのままRedisキーへ使わないよう、正規化してハッシュ化。
 func hashEmailForRateLimit(email string) string {
 	v := strings.ToLower(strings.TrimSpace(email))
+	sum := sha256.Sum256([]byte(v))
+	return hex.EncodeToString(sum[:])
+}
+
+// キーにはhash済みの文字列だけ使う
+func hashTokenForRateLimit(token string) string {
+	v := strings.TrimSpace(token)
 	sum := sha256.Sum256([]byte(v))
 	return hex.EncodeToString(sum[:])
 }

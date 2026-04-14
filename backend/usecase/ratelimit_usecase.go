@@ -28,7 +28,7 @@ type RateLimiter interface {
 	AllowSignup(ip string) (bool, int, error)
 	AllowLoginIP(ip string) (bool, int, error)
 	AllowLogin(emailHash string) (bool, int, error)
-	AllowRefresh(userID int64) (bool, int, error)
+	AllowRefreshToken(tokenHash string) (bool, int, error)
 	AllowResendIP(ip string) (bool, int, error)
 	AllowResendMail(emailHash string) (bool, int, error)
 	AllowForgotIP(ip string) (bool, int, error)
@@ -43,8 +43,8 @@ type RateLimitUC struct {
 	// loginをemailで制限するためのルール。
 	loginIP   RateRule
 	loginMail RateRule
-	// refreshをuserIDで制限するためのルール。
-	refreshUID RateRule
+	// refreshをrefreshtokenのhashで制限するためのルール。
+	refreshToken RateRule
 
 	// verify再送をIPで制限するためのルール。
 	resendIP RateRule
@@ -65,22 +65,22 @@ func NewRateLimitUC(
 	signupIP RateRule,
 	loginIP RateRule,
 	loginMail RateRule,
-	refreshUID RateRule,
+	refreshToken RateRule,
 	resendIP RateRule,
 	resendMail RateRule,
 	forgotIP RateRule,
 	forgotMail RateRule,
 ) RateLimiter {
 	return &RateLimitUC{
-		store:      store,
-		signupIP:   signupIP,
-		loginIP:    loginIP,
-		loginMail:  loginMail,
-		refreshUID: refreshUID,
-		resendIP:   resendIP,
-		resendMail: resendMail,
-		forgotIP:   forgotIP,
-		forgotMail: forgotMail,
+		store:        store,
+		signupIP:     signupIP,
+		loginIP:      loginIP,
+		loginMail:    loginMail,
+		refreshToken: refreshToken,
+		resendIP:     resendIP,
+		resendMail:   resendMail,
+		forgotIP:     forgotIP,
+		forgotMail:   forgotMail,
 	}
 }
 
@@ -99,9 +99,9 @@ func (u *RateLimitUC) AllowLogin(emailHash string) (bool, int, error) {
 	return u.allow("rl:login:mail:"+emailHash, u.loginMail)
 }
 
-// 判定単位はuserID。
-func (u *RateLimitUC) AllowRefresh(userID int64) (bool, int, error) {
-	return u.allow(fmt.Sprintf("rl:refresh:uid:%d", userID), u.refreshUID)
+// 判定単位はrefreshのtokenをhash。
+func (u *RateLimitUC) AllowRefreshToken(tokenHash string) (bool, int, error) {
+	return u.allow("rl:refresh:token:"+tokenHash, u.refreshToken)
 }
 
 // 判定単位はIP。
