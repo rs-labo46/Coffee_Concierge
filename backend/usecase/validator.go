@@ -10,6 +10,8 @@ type AuthVal interface {
 	// ログイン時の email / passwordを検証。
 	Login(email string, pw string) error
 
+	Email(email string) error
+
 	// 新しいパスワードの形式を検証。
 	NewPw(pw string) error
 

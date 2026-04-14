@@ -74,15 +74,15 @@ type ForgotPwIn struct {
 	Email string
 }
 
+// 認証メール再送入力。
+type ResendVerifyIn struct {
+	Email string
+}
+
 // 再設定。
 type ResetPwIn struct {
 	Token    string
 	Password string
-}
-
-// 認証メール再送入力。
-type ResendVerifyIn struct {
-	Email string
 }
 
 // password hash / compare。
@@ -513,8 +513,10 @@ func (u *authUsecase) Logout(actor entity.Actor, refreshToken string) error {
 }
 
 // 再設定tokenを発行する。
-// 再設定tokenを発行する。
 func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
+	if err := u.val.Email(in.Email); err != nil {
+		return err
+	}
 	user, err := u.users.GetByEmail(in.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -571,6 +573,9 @@ func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
 
 // 認証メールを再送する。
 func (u *authUsecase) ResendVerify(in ResendVerifyIn) error {
+	if err := u.val.Email(in.Email); err != nil {
+		return err
+	}
 	user, err := u.users.GetByEmail(in.Email)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {

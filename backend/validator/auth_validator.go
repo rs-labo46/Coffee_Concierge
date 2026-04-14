@@ -46,7 +46,16 @@ func (v *authValidator) Signup(email string, pw string) error {
 	)
 }
 
-// ログイン時の email / password を検証。
+// email単体の形式検証を行う。
+func (v *authValidator) Email(email string) error {
+	return validation.Validate(email,
+		validation.Required.Error("email is required"),
+		validation.RuneLength(1, 254).Error("email must be 1 to 254 chars"),
+		is.Email.Error("email must be valid"),
+	)
+}
+
+// ログイン時のemail/passwordを検証。
 func (v *authValidator) Login(email string, pw string) error {
 	in := struct {
 		Email    string
