@@ -297,7 +297,7 @@ func newUsecases(
 		repos.itemRepo,
 		repos.auditRepo,
 		vals.searchVal,
-		nil, // ranker は未実装
+		usecase.NewCoffeeRanker(),
 		svcs.geminiClient,
 		svcs.clock,
 		svcs.idGen,
