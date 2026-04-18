@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"time"
 
 	"coffee-spa/entity"
@@ -735,7 +734,4 @@ func (u *authUsecase) writeAudit(
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
-}
-func uintToStr(v uint) string {
-	return strconv.FormatUint(uint64(v), 10)
 }

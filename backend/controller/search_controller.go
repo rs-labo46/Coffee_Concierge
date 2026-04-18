@@ -17,6 +17,16 @@ type SearchCtl struct {
 	sessionUC usecase.SessionUC
 }
 
+func NewSearchCtl(
+	flowUC usecase.SearchFlowUC,
+	sessionUC usecase.SessionUC,
+) *SearchCtl {
+	return &SearchCtl{
+		flowUC:    flowUC,
+		sessionUC: sessionUC,
+	}
+}
+
 // 生成
 type StartSessionReq struct {
 	Title string `json:"title"`

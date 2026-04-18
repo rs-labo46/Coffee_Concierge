@@ -119,11 +119,6 @@ type ConditionDiff struct {
 	Note       *string
 }
 
-// 発話から条件差分を作る。
-type PrefParser interface {
-	ParseTurn(body string, current entity.Pref) (ConditionDiff, error)
-}
-
 // ランカーが返す中間結果。
 type RankItem struct {
 	Bean   entity.Bean
@@ -136,16 +131,6 @@ type Ranker interface {
 	Rank(pref entity.Pref, beans []entity.Bean) ([]RankItem, error)
 }
 
-// suggestion理由文を生成する。
-type ExplainSvc interface {
-	BuildReason(pref entity.Pref, bean entity.Bean, recipe *entity.Recipe, item *entity.Item) (string, error)
-}
-
-// 次の質問候補を生成する。
-type FollowupSvc interface {
-	BuildQuestions(pref entity.Pref, beans []entity.Bean) ([]string, error)
-}
-
 // searchFlowUsecase は SearchFlowUC の実装。
 type searchFlowUsecase struct {
 	sessions repository.SessionRepository
@@ -153,15 +138,15 @@ type searchFlowUsecase struct {
 	recipes  repository.RecipeRepository
 	items    repository.ItemRepository
 	audits   repository.AuditRepository
-
-	val      SearchVal
-	parser   PrefParser
-	ranker   Ranker
-	explain  ExplainSvc
-	followup FollowupSvc
+	// 入力検証はusecase側。
+	val SearchVal
+	// 候補のランキング。
+	ranker Ranker
+	// 発話解釈・理由文・追加質問生成の補助。
+	gemini GeminiClient
+	// 現在時刻取得とguest session key生成。
 	clock    Clock
 	idGen    IDGen
-
 	guestTTL time.Duration
 }
 
@@ -172,10 +157,8 @@ func NewSearchFlowUsecase(
 	items repository.ItemRepository,
 	audits repository.AuditRepository,
 	val SearchVal,
-	parser PrefParser,
 	ranker Ranker,
-	explain ExplainSvc,
-	followup FollowupSvc,
+	gemini GeminiClient,
 	clock Clock,
 	idGen IDGen,
 	guestTTL time.Duration,
@@ -187,10 +170,8 @@ func NewSearchFlowUsecase(
 		items:    items,
 		audits:   audits,
 		val:      val,
-		parser:   parser,
 		ranker:   ranker,
-		explain:  explain,
-		followup: followup,
+		gemini:   gemini,
 		clock:    clock,
 		idGen:    idGen,
 		guestTTL: guestTTL,
@@ -333,15 +314,57 @@ func (u *searchFlowUsecase) AddTurn(in AddTurnIn) (AddTurnOut, error) {
 	if err != nil {
 		return AddTurnOut{}, err
 	}
+	turns, err := u.sessions.ListTurns(session.ID)
+	if err != nil {
+		return AddTurnOut{}, err
+	}
 
-	if u.parser != nil {
-		diff, err := u.parser.ParseTurn(in.Body, *pref)
+	updated := false
+
+	if u.gemini != nil {
+		u.writeAudit(
+			"ai.request",
+			userIDPtr(in.Actor),
+			map[string]string{
+				"session_id": uintToStr(session.ID),
+				"mode":       "condition_diff",
+			},
+		)
+
+		diffOut, err := u.gemini.BuildConditionDiff(GeminiConditionDiffIn{
+			InputText: in.Body,
+			Pref:      *pref,
+			Turns:     turns,
+		})
 		if err == nil {
+			diff := toConditionDiff(diffOut)
 			u.applyDiff(pref, diff)
-			pref.UpdatedAt = now
-			if err := u.sessions.UpdatePref(pref); err != nil {
-				return AddTurnOut{}, err
-			}
+			updated = true
+
+			u.writeAudit(
+				"ai.success",
+				userIDPtr(in.Actor),
+				map[string]string{
+					"session_id": uintToStr(session.ID),
+					"mode":       "condition_diff",
+				},
+			)
+		} else {
+			u.writeAudit(
+				"ai.failed",
+				userIDPtr(in.Actor),
+				map[string]string{
+					"session_id": uintToStr(session.ID),
+					"mode":       "condition_diff",
+				},
+			)
+		}
+	}
+
+	if updated {
+		pref.UpdatedAt = now
+		if err := u.sessions.UpdatePref(pref); err != nil {
+			return AddTurnOut{}, err
 		}
 	}
 
@@ -443,6 +466,190 @@ func (u *searchFlowUsecase) PatchPref(in PatchPrefIn) (PatchPrefOut, error) {
 	}, nil
 }
 
+// suggestion群に理由文を埋める。Geminiが使えない、または失敗した場合は既存のテンプレ理由文を維持。
+func (u *searchFlowUsecase) fillSuggestionReasons(
+	pref entity.Pref,
+	suggestions *[]entity.Suggestion,
+	beans []entity.Bean,
+	recipes []entity.Recipe,
+	items []entity.Item,
+) {
+	if suggestions == nil || len(*suggestions) == 0 {
+		return
+	}
+
+	if u.gemini == nil {
+		u.writeAudit(
+			"ai.fallback",
+			nil,
+			map[string]string{
+				"session_id":    uintToStr(pref.SessionID),
+				"mode":          "reason",
+				"fallback_type": "reason_template",
+				"reason":        "gemini_client_nil",
+			},
+		)
+		return
+	}
+
+	u.writeAudit(
+		"ai.request",
+		nil,
+		map[string]string{
+			"session_id": uintToStr(pref.SessionID),
+			"mode":       "reason",
+		},
+	)
+
+	reasons, err := u.gemini.BuildReasons(GeminiReasonIn{
+		InputText:    pref.Note,
+		Pref:         pref,
+		Suggestions:  *suggestions,
+		Beans:        beans,
+		Recipes:      recipes,
+		Items:        items,
+		ExplainLevel: "normal",
+	})
+	if err != nil {
+		u.writeAudit(
+			"ai.failed",
+			nil,
+			map[string]string{
+				"session_id": uintToStr(pref.SessionID),
+				"mode":       "reason",
+				"error_type": "build_reasons_failed",
+			},
+		)
+
+		u.writeAudit(
+			"ai.fallback",
+			nil,
+			map[string]string{
+				"session_id":    uintToStr(pref.SessionID),
+				"mode":          "reason",
+				"fallback_type": "reason_template",
+				"reason":        "gemini_build_reasons_failed",
+			},
+		)
+		return
+	}
+
+	applied := 0
+	for _, r := range reasons {
+		for i := range *suggestions {
+			if (*suggestions)[i].Rank == r.Rank && r.Reason != "" {
+				(*suggestions)[i].Reason = r.Reason
+				applied++
+				break
+			}
+		}
+	}
+
+	if applied == 0 {
+		u.writeAudit(
+			"ai.fallback",
+			nil,
+			map[string]string{
+				"session_id":    uintToStr(pref.SessionID),
+				"mode":          "reason",
+				"fallback_type": "reason_template",
+				"reason":        "empty_reason_result",
+			},
+		)
+		return
+	}
+
+	u.writeAudit(
+		"ai.success",
+		nil,
+		map[string]string{
+			"session_id": uintToStr(pref.SessionID),
+			"mode":       "reason",
+		},
+	)
+}
+
+// 次の質問候補を組み立てる。Geminiが失敗した場合は空配列を返し、検索結果本体は止めない。
+func (u *searchFlowUsecase) buildFollowups(pref entity.Pref, beans []entity.Bean) []string {
+	if u.gemini == nil || len(beans) == 0 {
+		u.writeAudit(
+			"ai.fallback",
+			nil,
+			map[string]string{
+				"session_id":    uintToStr(pref.SessionID),
+				"mode":          "followup",
+				"fallback_type": "empty_followups",
+				"reason":        "gemini_client_nil_or_no_beans",
+			},
+		)
+		return []string{}
+	}
+
+	u.writeAudit(
+		"ai.request",
+		nil,
+		map[string]string{
+			"session_id": uintToStr(pref.SessionID),
+			"mode":       "followup",
+		},
+	)
+
+	qs, err := u.gemini.BuildFollowups(GeminiFollowupIn{
+		InputText: pref.Note,
+		Pref:      pref,
+		Beans:     beans,
+	})
+	if err != nil {
+		u.writeAudit(
+			"ai.failed",
+			nil,
+			map[string]string{
+				"session_id": uintToStr(pref.SessionID),
+				"mode":       "followup",
+				"error_type": "build_followups_failed",
+			},
+		)
+
+		u.writeAudit(
+			"ai.fallback",
+			nil,
+			map[string]string{
+				"session_id":    uintToStr(pref.SessionID),
+				"mode":          "followup",
+				"fallback_type": "empty_followups",
+				"reason":        "gemini_build_followups_failed",
+			},
+		)
+		return []string{}
+	}
+
+	qs = limitStrings(qs, 3)
+	if len(qs) == 0 {
+		u.writeAudit(
+			"ai.fallback",
+			nil,
+			map[string]string{
+				"session_id":    uintToStr(pref.SessionID),
+				"mode":          "followup",
+				"fallback_type": "empty_followups",
+				"reason":        "empty_followup_result",
+			},
+		)
+		return []string{}
+	}
+
+	u.writeAudit(
+		"ai.success",
+		nil,
+		map[string]string{
+			"session_id": uintToStr(pref.SessionID),
+			"mode":       "followup",
+		},
+	)
+
+	return qs
+}
+
 // prefを使ってsuggestions / beans / recipes / items / followupsを組み立てる。
 func (u *searchFlowUsecase) buildResult(pref entity.Pref) (SearchResult, error) {
 	beanList, err := u.beans.SearchByPref(pref, 10)
@@ -468,14 +675,11 @@ func (u *searchFlowUsecase) buildResult(pref entity.Pref) (SearchResult, error) 
 
 		var recipeID *uint
 		var itemID *uint
-		var selectedRecipe *entity.Recipe
-		var selectedItem *entity.Item
 
 		recipe, err := u.recipes.FindPrimaryByBean(bean.ID, pref.Method, pref.TempPref)
 		if err == nil && recipe != nil {
-			selectedRecipe = recipe
 			recipeID = &recipe.ID
-			recipes = append(recipes, *recipe)
+			recipes = appendUniqueRecipes(recipes, []entity.Recipe{*recipe})
 		}
 
 		relatedItems, err := u.items.SearchRelated(
@@ -488,18 +692,11 @@ func (u *searchFlowUsecase) buildResult(pref entity.Pref) (SearchResult, error) 
 			now,
 		)
 		if err == nil && len(relatedItems) > 0 {
-			selectedItem = &relatedItems[0]
 			itemID = &relatedItems[0].ID
 			items = appendUniqueItems(items, relatedItems)
 		}
 
 		reason := rankItem.Reason
-		if u.explain != nil {
-			builtReason, err := u.explain.BuildReason(pref, bean, selectedRecipe, selectedItem)
-			if err == nil && builtReason != "" {
-				reason = builtReason
-			}
-		}
 		if reason == "" {
 			reason = defaultReason(bean, pref)
 		}
@@ -515,17 +712,13 @@ func (u *searchFlowUsecase) buildResult(pref entity.Pref) (SearchResult, error) 
 		})
 	}
 
+	u.fillSuggestionReasons(pref, &suggestions, beans, recipes, items)
+
 	if err := u.sessions.ReplaceSuggestions(pref.SessionID, suggestions); err != nil {
 		return SearchResult{}, err
 	}
 
-	followups := make([]string, 0)
-	if u.followup != nil {
-		qs, err := u.followup.BuildQuestions(pref, beans)
-		if err == nil {
-			followups = limitStrings(qs, 3)
-		}
-	}
+	followups := u.buildFollowups(pref, beans)
 
 	u.writeAudit(
 		"ai.suggest.build",
@@ -746,6 +939,22 @@ func appendUniqueItems(base []entity.Item, extra []entity.Item) []entity.Item {
 	return out
 }
 
+func toConditionDiff(in GeminiConditionDiffOut) ConditionDiff {
+	return ConditionDiff{
+		Flavor:     in.Flavor,
+		Acidity:    in.Acidity,
+		Bitterness: in.Bitterness,
+		Body:       in.Body,
+		Aroma:      in.Aroma,
+		Mood:       in.Mood,
+		Method:     in.Method,
+		Scene:      in.Scene,
+		TempPref:   in.TempPref,
+		Excludes:   in.Excludes,
+		Note:       in.Note,
+	}
+}
+
 func limitStrings(xs []string, limit int) []string {
 	if limit <= 0 || len(xs) == 0 {
 		return []string{}
@@ -754,4 +963,30 @@ func limitStrings(xs []string, limit int) []string {
 		return xs
 	}
 	return xs[:limit]
+}
+
+// 同じrecipe.IDを2回以上入れないためのhelper
+func appendUniqueRecipes(base []entity.Recipe, extra []entity.Recipe) []entity.Recipe {
+	seen := make(map[uint]struct{}, len(base))
+	for _, recipe := range base {
+		seen[recipe.ID] = struct{}{}
+	}
+
+	out := make([]entity.Recipe, 0, len(base)+len(extra))
+	out = append(out, base...)
+
+	for _, recipe := range extra {
+		if _, ok := seen[recipe.ID]; ok {
+			continue
+		}
+		seen[recipe.ID] = struct{}{}
+		out = append(out, recipe)
+	}
+
+	return out
+}
+
+// 監査ログ用にuintを文字列化。
+func uintToStr(v uint) string {
+	return strconv.FormatUint(uint64(v), 10)
 }

@@ -33,6 +33,7 @@ type RateLimiter interface {
 	AllowResendMail(emailHash string) (bool, int, error)
 	AllowForgotIP(ip string) (bool, int, error)
 	AllowForgotMail(emailHash string) (bool, int, error)
+	AllowWS(key string) (bool, int, error)
 }
 
 type RateLimitUC struct {
@@ -57,6 +58,9 @@ type RateLimitUC struct {
 
 	// forgot passwordをemailで制限するためのルール。
 	forgotMail RateRule
+
+	// WebSocket接続を制限するためのルール。
+	wsConnect RateRule
 }
 
 // rate limitのusecaseを生成する。
@@ -70,6 +74,7 @@ func NewRateLimitUC(
 	resendMail RateRule,
 	forgotIP RateRule,
 	forgotMail RateRule,
+	wsConnect RateRule,
 ) RateLimiter {
 	return &RateLimitUC{
 		store:        store,
@@ -81,6 +86,7 @@ func NewRateLimitUC(
 		resendMail:   resendMail,
 		forgotIP:     forgotIP,
 		forgotMail:   forgotMail,
+		wsConnect:    wsConnect,
 	}
 }
 
@@ -124,6 +130,11 @@ func (u *RateLimitUC) AllowForgotMail(emailHash string) (bool, int, error) {
 	return u.allow("rl:forgot:mail:"+emailHash, u.forgotMail)
 }
 
+// WebSocket接続専用の制限判定
+func (u *RateLimitUC) AllowWS(key string) (bool, int, error) {
+	return u.allow(key, u.wsConnect)
+}
+
 // allow は共通処理。
 func (u *RateLimitUC) allow(key string, rule RateRule) (bool, int, error) {
 	if u == nil || u.store == nil {
@@ -134,7 +145,6 @@ func (u *RateLimitUC) allow(key string, rule RateRule) (bool, int, error) {
 		return false, 0, fmt.Errorf("rate limit key is empty")
 	}
 
-	// ルール値が壊れていたらToken Bucketとして成立しないから、エラー。
 	if rule.Rate <= 0 {
 		return false, 0, fmt.Errorf("invalid rule rate")
 	}
@@ -145,7 +155,6 @@ func (u *RateLimitUC) allow(key string, rule RateRule) (bool, int, error) {
 		return false, 0, fmt.Errorf("invalid rule cost")
 	}
 
-	// このkeyに、このruleを当てる
 	allowed, retryAfterSec, err := u.store.Allow(
 		key,
 		rule.Rate,
@@ -157,11 +166,9 @@ func (u *RateLimitUC) allow(key string, rule RateRule) (bool, int, error) {
 		return false, 0, err
 	}
 
-	// 許可されたならretryAfterは不要なため0を返す。
 	if allowed {
 		return true, 0, nil
 	}
 
-	// 拒否された場合は何秒後に再試行すべきかを返す。
 	return false, retryAfterSec, nil
 }
