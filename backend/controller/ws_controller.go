@@ -63,6 +63,24 @@ type wsServerEvent struct {
 	Message string      `json:"message,omitempty"`
 }
 
+// suggestionごとの理由文を分割送信するためのpayload。
+type wsExplainDeltaPayload struct {
+	Rank int    `json:"rank"`
+	Text string `json:"text"`
+	Done bool   `json:"done"`
+}
+
+// related item/recipeを返すpayload。
+type wsRelatedUpdatePayload struct {
+	Items   []entity.Item   `json:"items"`
+	Recipes []entity.Recipe `json:"recipes"`
+}
+
+// 追加の質問候補を返すpayload。
+type wsFollowupPayload struct {
+	Questions []string `json:"questions"`
+}
+
 // 接続を開始し、受信イベントをloopで処理する。
 // controllerの責務は「bind → DTO変換 → usecase 呼び出し → WS応答整形」
 func (ctl *WsCtl) Connect(c echo.Context) error {
@@ -145,13 +163,23 @@ func (ctl *WsCtl) onAddTurn(
 		return err
 	}
 
-	// 次に候補更新結果を返す。
-	if err := conn.WriteJSON(wsServerEvent{
-		Type: "candidate.update",
-		Payload: map[string]interface{}{
-			"result": toSearchResultRes(out.Result),
-		},
-	}); err != nil {
+	// 候補の更新を返す。
+	if err := ctl.writeCandidateUpdate(conn, out.Result); err != nil {
+		return err
+	}
+
+	// 関連するrecipeとitemを返す。
+	if err := ctl.writeRelatedUpdate(conn, out.Result); err != nil {
+		return err
+	}
+
+	// 追加の質問候補を返す。
+	if err := ctl.writeAskFollowup(conn, out.Result); err != nil {
+		return err
+	}
+
+	// reasonをsuggestion単位で分割して返す。
+	if err := ctl.writeExplainDelta(conn, out.Result); err != nil {
 		return err
 	}
 
@@ -196,12 +224,19 @@ func (ctl *WsCtl) onPatchPref(
 		return err
 	}
 
-	if err := conn.WriteJSON(wsServerEvent{
-		Type: "candidate.update",
-		Payload: map[string]interface{}{
-			"result": toSearchResultRes(out.Result),
-		},
-	}); err != nil {
+	if err := ctl.writeCandidateUpdate(conn, out.Result); err != nil {
+		return err
+	}
+
+	if err := ctl.writeRelatedUpdate(conn, out.Result); err != nil {
+		return err
+	}
+
+	if err := ctl.writeAskFollowup(conn, out.Result); err != nil {
+		return err
+	}
+
+	if err := ctl.writeExplainDelta(conn, out.Result); err != nil {
 		return err
 	}
 
@@ -214,7 +249,7 @@ func (ctl *WsCtl) onPatchPref(
 }
 
 // session.closeイベントを受けてsessionを終了。
-// private / guest の最終判定自体はusecase側。
+// private/guestの最終判定自体はusecase側。
 func (ctl *WsCtl) onCloseSession(
 	conn *websocket.Conn,
 	actor *entity.Actor,
@@ -237,6 +272,71 @@ func (ctl *WsCtl) onCloseSession(
 			"message":    "session closed",
 		},
 	})
+}
+
+// 検索結果全体をcandidate.updateとして返す。
+func (ctl *WsCtl) writeCandidateUpdate(
+	conn *websocket.Conn,
+	result usecase.SearchResult,
+) error {
+	return conn.WriteJSON(wsServerEvent{
+		Type: "candidate.update",
+		Payload: map[string]interface{}{
+			"result": toSearchResultRes(result),
+		},
+	})
+}
+
+// related itemとrecipeをrelated.updateとして返す。(recipesとitemsをそのまま返す)
+func (ctl *WsCtl) writeRelatedUpdate(
+	conn *websocket.Conn,
+	result usecase.SearchResult,
+) error {
+	return conn.WriteJSON(wsServerEvent{
+		Type: "related.update",
+		Payload: wsRelatedUpdatePayload{
+			Items:   result.Items,
+			Recipes: result.Recipes,
+		},
+	})
+}
+
+// 追加の質問候補をask.followup(空でもevent自体は返す)として返す。
+func (ctl *WsCtl) writeAskFollowup(
+	conn *websocket.Conn,
+	result usecase.SearchResult,
+) error {
+	return conn.WriteJSON(wsServerEvent{
+		Type: "ask.followup",
+		Payload: wsFollowupPayload{
+			Questions: result.Followups,
+		},
+	})
+}
+
+// suggestionごとの理由文をexplain.deltaとして順に返す。
+func (ctl *WsCtl) writeExplainDelta(
+	conn *websocket.Conn,
+	result usecase.SearchResult,
+) error {
+	for _, suggestion := range result.Suggestions {
+		if strings.TrimSpace(suggestion.Reason) == "" {
+			continue
+		}
+
+		if err := conn.WriteJSON(wsServerEvent{
+			Type: "explain.delta",
+			Payload: wsExplainDeltaPayload{
+				Rank: suggestion.Rank,
+				Text: suggestion.Reason,
+				Done: false,
+			},
+		}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // guest再開用のsession keyをquery/headerから取得。
