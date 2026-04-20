@@ -144,6 +144,7 @@ func (ctl *WsCtl) onAddTurn(
 	ev wsClientEvent,
 ) error {
 	out, err := ctl.flowUC.AddTurn(usecase.AddTurnIn{
+		RequestID:  "",
 		Actor:      actor,
 		SessionID:  ev.SessionID,
 		SessionKey: sessionKey,
@@ -205,6 +206,7 @@ func (ctl *WsCtl) onPatchPref(
 	}
 
 	out, err := ctl.flowUC.PatchPref(usecase.PatchPrefIn{
+		RequestID:  "",
 		Actor:      actor,
 		SessionID:  ev.SessionID,
 		SessionKey: sessionKey,

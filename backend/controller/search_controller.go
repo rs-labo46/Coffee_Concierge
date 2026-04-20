@@ -4,6 +4,7 @@ import (
 	"coffee-spa/entity"
 	"coffee-spa/usecase"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -110,8 +111,9 @@ func (ctl *SearchCtl) StartSession(c echo.Context) error {
 	}
 	actor := actorFromCtx(c)
 	out, err := ctl.flowUC.StartSession(usecase.StartSessionIn{
-		Actor: actor,
-		Title: req.Title,
+		RequestID: requestIDFromCtx(c),
+		Actor:     actor,
+		Title:     req.Title,
 	})
 	if err != nil {
 		return writeErr(c, err)
@@ -146,6 +148,7 @@ func (ctl *SearchCtl) SetPref(c echo.Context) error {
 	}
 
 	out, err := ctl.flowUC.SetPref(usecase.SetPrefIn{
+		RequestID:  requestIDFromCtx(c),
 		Actor:      actor,
 		SessionID:  sessionID,
 		SessionKey: sessionKey,
@@ -193,6 +196,7 @@ func (ctl *SearchCtl) PatchPref(c echo.Context) error {
 	}
 
 	out, err := ctl.flowUC.PatchPref(usecase.PatchPrefIn{
+		RequestID:  requestIDFromCtx(c),
 		Actor:      actor,
 		SessionID:  sessionID,
 		SessionKey: sessionKey,
@@ -335,4 +339,10 @@ func toSearchResultRes(in usecase.SearchResult) SearchResultRes {
 		Items:       in.Items,
 		Followups:   in.Followups,
 	}
+}
+
+// middlewareで付与されたrequest_idを取り出す。
+func requestIDFromCtx(c echo.Context) string {
+	v, _ := c.Get("request_id").(string)
+	return strings.TrimSpace(v)
 }

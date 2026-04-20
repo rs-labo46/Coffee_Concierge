@@ -2,6 +2,15 @@ package usecase
 
 import "coffee-spa/entity"
 
+// AI呼び出しの監査に使うメタ情報。
+type GeminiAuditMeta struct {
+	Provider   string
+	Model      string
+	Status     string
+	DurationMS int64
+	ErrorType  string
+}
+
 // 発話から条件差分候補を作る
 type GeminiConditionDiffIn struct {
 	InputText string
@@ -50,7 +59,8 @@ type GeminiFollowupIn struct {
 
 // geminiの呼び出し。iinterfaceにのみ依存しHTTPには依存しない
 type GeminiClient interface {
-	BuildConditionDiff(in GeminiConditionDiffIn) (GeminiConditionDiffOut, error)
-	BuildReasons(in GeminiReasonIn) ([]GeminiReason, error)
-	BuildFollowups(in GeminiFollowupIn) ([]string, error)
+	Info() (provider string, model string)
+	BuildConditionDiff(in GeminiConditionDiffIn) (GeminiConditionDiffOut, GeminiAuditMeta, error)
+	BuildReasons(in GeminiReasonIn) ([]GeminiReason, GeminiAuditMeta, error)
+	BuildFollowups(in GeminiFollowupIn) ([]string, GeminiAuditMeta, error)
 }

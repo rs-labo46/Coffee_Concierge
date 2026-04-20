@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"coffee-spa/entity"
@@ -22,8 +23,9 @@ type SearchFlowUC interface {
 
 // セッション開始入力。
 type StartSessionIn struct {
-	Actor *entity.Actor
-	Title string
+	RequestID string
+	Actor     *entity.Actor
+	Title     string
 }
 
 // セッション開始結果。
@@ -34,6 +36,7 @@ type StartSessionOut struct {
 
 // 初期条件設定入力。
 type SetPrefIn struct {
+	RequestID  string
 	Actor      *entity.Actor
 	SessionID  uint
 	SessionKey string
@@ -58,6 +61,7 @@ type SetPrefOut struct {
 
 // 発話追加入力。
 type AddTurnIn struct {
+	RequestID  string
 	Actor      *entity.Actor
 	SessionID  uint
 	SessionKey string
@@ -73,6 +77,7 @@ type AddTurnOut struct {
 
 // 条件差分更新入力。
 type PatchPrefIn struct {
+	RequestID  string
 	Actor      *entity.Actor
 	SessionID  uint
 	SessionKey string
@@ -266,7 +271,7 @@ func (u *searchFlowUsecase) SetPref(in SetPrefIn) (SetPrefOut, error) {
 		return SetPrefOut{}, err
 	}
 
-	result, err := u.buildResult(*pref)
+	result, err := u.buildResult(*pref, in.RequestID, userIDPtr(in.Actor))
 	if err != nil {
 		return SetPrefOut{}, err
 	}
@@ -331,7 +336,7 @@ func (u *searchFlowUsecase) AddTurn(in AddTurnIn) (AddTurnOut, error) {
 			},
 		)
 
-		diffOut, err := u.gemini.BuildConditionDiff(GeminiConditionDiffIn{
+		diffOut, meta, err := u.gemini.BuildConditionDiff(GeminiConditionDiffIn{
 			InputText: in.Body,
 			Pref:      *pref,
 			Turns:     turns,
@@ -345,8 +350,13 @@ func (u *searchFlowUsecase) AddTurn(in AddTurnIn) (AddTurnOut, error) {
 				"ai.success",
 				userIDPtr(in.Actor),
 				map[string]string{
-					"session_id": uintToStr(session.ID),
-					"mode":       "condition_diff",
+					"request_id":  in.RequestID,
+					"session_id":  uintToStr(session.ID),
+					"provider":    meta.Provider,
+					"model":       meta.Model,
+					"mode":        "condition_diff",
+					"status":      meta.Status,
+					"duration_ms": strconv.FormatInt(meta.DurationMS, 10),
 				},
 			)
 		} else {
@@ -354,13 +364,17 @@ func (u *searchFlowUsecase) AddTurn(in AddTurnIn) (AddTurnOut, error) {
 				"ai.failed",
 				userIDPtr(in.Actor),
 				map[string]string{
-					"session_id": uintToStr(session.ID),
-					"mode":       "condition_diff",
+					"request_id":  in.RequestID,
+					"session_id":  uintToStr(session.ID),
+					"provider":    meta.Provider,
+					"model":       meta.Model,
+					"mode":        "condition_diff",
+					"duration_ms": strconv.FormatInt(meta.DurationMS, 10),
+					"error_type":  meta.ErrorType,
 				},
 			)
 		}
 	}
-
 	if updated {
 		pref.UpdatedAt = now
 		if err := u.sessions.UpdatePref(pref); err != nil {
@@ -368,7 +382,7 @@ func (u *searchFlowUsecase) AddTurn(in AddTurnIn) (AddTurnOut, error) {
 		}
 	}
 
-	result, err := u.buildResult(*pref)
+	result, err := u.buildResult(*pref, in.RequestID, userIDPtr(in.Actor))
 	if err != nil {
 		return AddTurnOut{}, err
 	}
@@ -447,7 +461,7 @@ func (u *searchFlowUsecase) PatchPref(in PatchPrefIn) (PatchPrefOut, error) {
 		return PatchPrefOut{}, err
 	}
 
-	result, err := u.buildResult(*pref)
+	result, err := u.buildResult(*pref, in.RequestID, userIDPtr(in.Actor))
 	if err != nil {
 		return PatchPrefOut{}, err
 	}
@@ -473,17 +487,24 @@ func (u *searchFlowUsecase) fillSuggestionReasons(
 	beans []entity.Bean,
 	recipes []entity.Recipe,
 	items []entity.Item,
+	requestID string,
+	userID *uint,
 ) {
 	if suggestions == nil || len(*suggestions) == 0 {
 		return
 	}
 
+	provider, model := u.aiInfo()
+
 	if u.gemini == nil {
 		u.writeAudit(
 			"ai.fallback",
-			nil,
+			userID,
 			map[string]string{
+				"request_id":    requestID,
 				"session_id":    uintToStr(pref.SessionID),
+				"provider":      provider,
+				"model":         model,
 				"mode":          "reason",
 				"fallback_type": "reason_template",
 				"reason":        "gemini_client_nil",
@@ -494,14 +515,17 @@ func (u *searchFlowUsecase) fillSuggestionReasons(
 
 	u.writeAudit(
 		"ai.request",
-		nil,
+		userID,
 		map[string]string{
+			"request_id": requestID,
 			"session_id": uintToStr(pref.SessionID),
+			"provider":   provider,
+			"model":      model,
 			"mode":       "reason",
 		},
 	)
 
-	reasons, err := u.gemini.BuildReasons(GeminiReasonIn{
+	reasons, meta, err := u.gemini.BuildReasons(GeminiReasonIn{
 		InputText:    pref.Note,
 		Pref:         pref,
 		Suggestions:  *suggestions,
@@ -513,19 +537,26 @@ func (u *searchFlowUsecase) fillSuggestionReasons(
 	if err != nil {
 		u.writeAudit(
 			"ai.failed",
-			nil,
+			userID,
 			map[string]string{
-				"session_id": uintToStr(pref.SessionID),
-				"mode":       "reason",
-				"error_type": "build_reasons_failed",
+				"request_id":  requestID,
+				"session_id":  uintToStr(pref.SessionID),
+				"provider":    meta.Provider,
+				"model":       meta.Model,
+				"mode":        "reason",
+				"duration_ms": strconv.FormatInt(meta.DurationMS, 10),
+				"error_type":  meta.ErrorType,
 			},
 		)
 
 		u.writeAudit(
 			"ai.fallback",
-			nil,
+			userID,
 			map[string]string{
+				"request_id":    requestID,
 				"session_id":    uintToStr(pref.SessionID),
+				"provider":      meta.Provider,
+				"model":         meta.Model,
 				"mode":          "reason",
 				"fallback_type": "reason_template",
 				"reason":        "gemini_build_reasons_failed",
@@ -548,9 +579,12 @@ func (u *searchFlowUsecase) fillSuggestionReasons(
 	if applied == 0 {
 		u.writeAudit(
 			"ai.fallback",
-			nil,
+			userID,
 			map[string]string{
+				"request_id":    requestID,
 				"session_id":    uintToStr(pref.SessionID),
+				"provider":      meta.Provider,
+				"model":         meta.Model,
 				"mode":          "reason",
 				"fallback_type": "reason_template",
 				"reason":        "empty_reason_result",
@@ -561,22 +595,37 @@ func (u *searchFlowUsecase) fillSuggestionReasons(
 
 	u.writeAudit(
 		"ai.success",
-		nil,
+		userID,
 		map[string]string{
-			"session_id": uintToStr(pref.SessionID),
-			"mode":       "reason",
+			"request_id":  requestID,
+			"session_id":  uintToStr(pref.SessionID),
+			"provider":    meta.Provider,
+			"model":       meta.Model,
+			"mode":        "reason",
+			"status":      meta.Status,
+			"duration_ms": strconv.FormatInt(meta.DurationMS, 10),
 		},
 	)
 }
 
 // 次の質問候補を組み立てる。Geminiが失敗した場合は空配列を返し、検索結果本体は止めない。
-func (u *searchFlowUsecase) buildFollowups(pref entity.Pref, beans []entity.Bean) []string {
+func (u *searchFlowUsecase) buildFollowups(
+	pref entity.Pref,
+	beans []entity.Bean,
+	requestID string,
+	userID *uint,
+) []string {
+	provider, model := u.aiInfo()
+
 	if u.gemini == nil || len(beans) == 0 {
 		u.writeAudit(
 			"ai.fallback",
-			nil,
+			userID,
 			map[string]string{
+				"request_id":    requestID,
 				"session_id":    uintToStr(pref.SessionID),
+				"provider":      provider,
+				"model":         model,
 				"mode":          "followup",
 				"fallback_type": "empty_followups",
 				"reason":        "gemini_client_nil_or_no_beans",
@@ -587,14 +636,17 @@ func (u *searchFlowUsecase) buildFollowups(pref entity.Pref, beans []entity.Bean
 
 	u.writeAudit(
 		"ai.request",
-		nil,
+		userID,
 		map[string]string{
+			"request_id": requestID,
 			"session_id": uintToStr(pref.SessionID),
+			"provider":   provider,
+			"model":      model,
 			"mode":       "followup",
 		},
 	)
 
-	qs, err := u.gemini.BuildFollowups(GeminiFollowupIn{
+	qs, meta, err := u.gemini.BuildFollowups(GeminiFollowupIn{
 		InputText: pref.Note,
 		Pref:      pref,
 		Beans:     beans,
@@ -602,19 +654,26 @@ func (u *searchFlowUsecase) buildFollowups(pref entity.Pref, beans []entity.Bean
 	if err != nil {
 		u.writeAudit(
 			"ai.failed",
-			nil,
+			userID,
 			map[string]string{
-				"session_id": uintToStr(pref.SessionID),
-				"mode":       "followup",
-				"error_type": "build_followups_failed",
+				"request_id":  requestID,
+				"session_id":  uintToStr(pref.SessionID),
+				"provider":    meta.Provider,
+				"model":       meta.Model,
+				"mode":        "followup",
+				"duration_ms": strconv.FormatInt(meta.DurationMS, 10),
+				"error_type":  meta.ErrorType,
 			},
 		)
 
 		u.writeAudit(
 			"ai.fallback",
-			nil,
+			userID,
 			map[string]string{
+				"request_id":    requestID,
 				"session_id":    uintToStr(pref.SessionID),
+				"provider":      meta.Provider,
+				"model":         meta.Model,
 				"mode":          "followup",
 				"fallback_type": "empty_followups",
 				"reason":        "gemini_build_followups_failed",
@@ -627,9 +686,12 @@ func (u *searchFlowUsecase) buildFollowups(pref entity.Pref, beans []entity.Bean
 	if len(qs) == 0 {
 		u.writeAudit(
 			"ai.fallback",
-			nil,
+			userID,
 			map[string]string{
+				"request_id":    requestID,
 				"session_id":    uintToStr(pref.SessionID),
+				"provider":      meta.Provider,
+				"model":         meta.Model,
 				"mode":          "followup",
 				"fallback_type": "empty_followups",
 				"reason":        "empty_followup_result",
@@ -640,10 +702,15 @@ func (u *searchFlowUsecase) buildFollowups(pref entity.Pref, beans []entity.Bean
 
 	u.writeAudit(
 		"ai.success",
-		nil,
+		userID,
 		map[string]string{
-			"session_id": uintToStr(pref.SessionID),
-			"mode":       "followup",
+			"request_id":  requestID,
+			"session_id":  uintToStr(pref.SessionID),
+			"provider":    meta.Provider,
+			"model":       meta.Model,
+			"mode":        "followup",
+			"status":      meta.Status,
+			"duration_ms": strconv.FormatInt(meta.DurationMS, 10),
 		},
 	)
 
@@ -651,7 +718,7 @@ func (u *searchFlowUsecase) buildFollowups(pref entity.Pref, beans []entity.Bean
 }
 
 // prefを使ってsuggestions / beans / recipes / items / followupsを組み立てる。
-func (u *searchFlowUsecase) buildResult(pref entity.Pref) (SearchResult, error) {
+func (u *searchFlowUsecase) buildResult(pref entity.Pref, requestID string, userID *uint) (SearchResult, error) {
 	beanList, err := u.beans.SearchByPref(pref, 10)
 	if err != nil {
 		return SearchResult{}, err
@@ -712,13 +779,11 @@ func (u *searchFlowUsecase) buildResult(pref entity.Pref) (SearchResult, error) 
 		})
 	}
 
-	u.fillSuggestionReasons(pref, &suggestions, beans, recipes, items)
-
+	u.fillSuggestionReasons(pref, &suggestions, beans, recipes, items, requestID, userID)
+	followups := u.buildFollowups(pref, beans, requestID, userID)
 	if err := u.sessions.ReplaceSuggestions(pref.SessionID, suggestions); err != nil {
 		return SearchResult{}, err
 	}
-
-	followups := u.buildFollowups(pref, beans)
 
 	u.writeAudit(
 		"ai.suggest.build",
@@ -916,7 +981,31 @@ func abs(v int) int {
 }
 
 func defaultReason(bean entity.Bean, pref entity.Pref) string {
-	return bean.Name + " は、今の好みに近い味のバランスです。"
+	parts := make([]string, 0, 3)
+
+	if pref.Body >= 4 {
+		parts = append(parts, "コク寄り")
+	} else if pref.Body <= 2 {
+		parts = append(parts, "軽め")
+	}
+
+	if pref.Acidity >= 4 {
+		parts = append(parts, "酸味寄り")
+	} else if pref.Acidity <= 2 {
+		parts = append(parts, "酸味控えめ")
+	}
+
+	if pref.Bitterness >= 4 {
+		parts = append(parts, "苦味寄り")
+	} else if pref.Bitterness <= 2 {
+		parts = append(parts, "苦味控えめ")
+	}
+
+	if len(parts) == 0 {
+		return bean.Name + " は、今の条件に近い候補です。"
+	}
+
+	return bean.Name + " は、" + strings.Join(parts, "で、今の好みに合いやすい候補です。")
 }
 
 func appendUniqueItems(base []entity.Item, extra []entity.Item) []entity.Item {
@@ -989,4 +1078,13 @@ func appendUniqueRecipes(base []entity.Recipe, extra []entity.Recipe) []entity.R
 // 監査ログ用にuintを文字列化。
 func uintToStr(v uint) string {
 	return strconv.FormatUint(uint64(v), 10)
+}
+
+// GeminiClientの具体的なmodel名が分からない時に監査用補助値を返す。
+// 成功/失敗時はGeminiAuditMetaのmodelを優先し、request時の暫定値としてだけ使う。
+func (u *searchFlowUsecase) aiInfo() (string, string) {
+	if u.gemini == nil {
+		return "unknown", "unknown"
+	}
+	return u.gemini.Info()
 }

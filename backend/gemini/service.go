@@ -51,7 +51,9 @@ func NewService() (*Service, error) {
 // 発話から条件差分候補を生成する。usecase側のSuggestion/Bean/Recipe/Itemを、理由生成用の軽い要約へ詰め替える。
 func (s *Service) BuildConditionDiff(
 	in usecase.GeminiConditionDiffIn,
-) (usecase.GeminiConditionDiffOut, error) {
+) (usecase.GeminiConditionDiffOut, usecase.GeminiAuditMeta, error) {
+	start := time.Now()
+
 	prompt := buildConditionDiffPrompt(usecase.ParseConditionDiffIn{
 		InputText: in.InputText,
 		Pref:      in.Pref,
@@ -65,29 +67,43 @@ func (s *Service) BuildConditionDiff(
 		conditionDiffSchema,
 		&out,
 	); err != nil {
-		return usecase.GeminiConditionDiffOut{}, err
+		return usecase.GeminiConditionDiffOut{}, usecase.GeminiAuditMeta{
+			Provider:   "gemini",
+			Model:      s.model,
+			Status:     "failed",
+			DurationMS: time.Since(start).Milliseconds(),
+			ErrorType:  "generate_condition_diff_failed",
+		}, err
 	}
 
 	return usecase.GeminiConditionDiffOut{
-		Flavor:     out.Flavor,
-		Acidity:    out.Acidity,
-		Bitterness: out.Bitterness,
-		Body:       out.Body,
-		Aroma:      out.Aroma,
-		Mood:       out.Mood,
-		Method:     out.Method,
-		Scene:      out.Scene,
-		TempPref:   out.TempPref,
-		Excludes:   out.Excludes,
-		Note:       out.Note,
-	}, nil
+			Flavor:     out.Flavor,
+			Acidity:    out.Acidity,
+			Bitterness: out.Bitterness,
+			Body:       out.Body,
+			Aroma:      out.Aroma,
+			Mood:       out.Mood,
+			Method:     out.Method,
+			Scene:      out.Scene,
+			TempPref:   out.TempPref,
+			Excludes:   out.Excludes,
+			Note:       out.Note,
+		}, usecase.GeminiAuditMeta{
+			Provider:   "gemini",
+			Model:      s.model,
+			Status:     "success",
+			DurationMS: time.Since(start).Milliseconds(),
+			ErrorType:  "",
+		}, nil
 }
 
 // suggestionごとの理由文を生成。
 // usecase.GeminiReasonInをprompt用の候補要約へ変換して送る。
 func (s *Service) BuildReasons(
 	in usecase.GeminiReasonIn,
-) ([]usecase.GeminiReason, error) {
+) ([]usecase.GeminiReason, usecase.GeminiAuditMeta, error) {
+	start := time.Now()
+
 	candidates := make([]usecase.ReasonCandidate, 0, len(in.Suggestions))
 
 	for _, sug := range in.Suggestions {
@@ -135,7 +151,13 @@ func (s *Service) BuildReasons(
 		reasonListSchema,
 		&out,
 	); err != nil {
-		return nil, err
+		return nil, usecase.GeminiAuditMeta{
+			Provider:   "gemini",
+			Model:      s.model,
+			Status:     "failed",
+			DurationMS: time.Since(start).Milliseconds(),
+			ErrorType:  "build_reasons_failed",
+		}, err
 	}
 
 	results := make([]usecase.GeminiReason, 0, len(out.Reasons))
@@ -147,20 +169,27 @@ func (s *Service) BuildReasons(
 		if rank == 0 {
 			continue
 		}
-
 		results = append(results, usecase.GeminiReason{
 			Rank:   rank,
 			Reason: strings.TrimSpace(r.Reason),
 		})
 	}
 
-	return results, nil
+	return results, usecase.GeminiAuditMeta{
+		Provider:   "gemini",
+		Model:      s.model,
+		Status:     "success",
+		DurationMS: time.Since(start).Milliseconds(),
+		ErrorType:  "",
+	}, nil
 }
 
 // 次にユーザーへ確認したい質問候補を最大3件生成
 func (s *Service) BuildFollowups(
 	in usecase.GeminiFollowupIn,
-) ([]string, error) {
+) ([]string, usecase.GeminiAuditMeta, error) {
+	start := time.Now()
+
 	candidates := make([]usecase.QuestionCandidate, 0, len(in.Beans))
 	for _, bean := range in.Beans {
 		candidates = append(candidates, usecase.QuestionCandidate{
@@ -184,7 +213,13 @@ func (s *Service) BuildFollowups(
 		questionListSchema,
 		&out,
 	); err != nil {
-		return nil, err
+		return nil, usecase.GeminiAuditMeta{
+			Provider:   "gemini",
+			Model:      s.model,
+			Status:     "failed",
+			DurationMS: time.Since(start).Milliseconds(),
+			ErrorType:  "build_followups_failed",
+		}, err
 	}
 
 	qs := make([]string, 0, len(out.Questions))
@@ -199,7 +234,13 @@ func (s *Service) BuildFollowups(
 		}
 	}
 
-	return qs, nil
+	return qs, usecase.GeminiAuditMeta{
+		Provider:   "gemini",
+		Model:      s.model,
+		Status:     "success",
+		DurationMS: time.Since(start).Milliseconds(),
+		ErrorType:  "",
+	}, nil
 }
 
 // Gemini generateContentを叩いてJSONを受け取る。
@@ -445,3 +486,8 @@ var questionListSchema = json.RawMessage(`{
   "required":["questions"],
   "additionalProperties":false
 }`)
+
+// 監査用にprovider/modelを返す。
+func (s *Service) Info() (string, string) {
+	return "gemini", s.model
+}

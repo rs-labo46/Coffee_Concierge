@@ -7,20 +7,22 @@ import (
 	"coffee-spa/usecase"
 )
 
-// GeminiClient のモック実装で、本物のGeminiAPIを呼ばず、簡単なキーワード判定で条件差分・理由文・追加質問を返す。
+// 実APIを叩かずに、発話から簡易的な条件差分・理由文・追加質問を返す。
 type MockClient struct{}
 
 func NewMockClient() usecase.GeminiClient {
 	return &MockClient{}
 }
 
-// 発話文から簡易的に条件差分候補を返す。
-func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (usecase.GeminiConditionDiffOut, error) {
+// 発話文から簡易的な条件差分候補を返す。
+// 単純なキーワード一致で値を組み立てる。
+func (m *MockClient) BuildConditionDiff(
+	in usecase.GeminiConditionDiffIn,
+) (usecase.GeminiConditionDiffOut, usecase.GeminiAuditMeta, error) {
 	text := normalize(in.InputText)
 
 	out := usecase.GeminiConditionDiffOut{}
 
-	// body
 	if containsAny(text, "軽め", "軽い", "すっきり") {
 		v := clampScore(in.Pref.Body - 1)
 		out.Body = &v
@@ -30,7 +32,6 @@ func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (useca
 		out.Body = &v
 	}
 
-	// acidity
 	if containsAny(text, "酸味弱め", "酸味は弱め", "酸味少なめ", "酸味控えめ") {
 		v := clampScore(in.Pref.Acidity - 1)
 		out.Acidity = &v
@@ -40,7 +41,6 @@ func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (useca
 		out.Acidity = &v
 	}
 
-	// bitterness
 	if containsAny(text, "苦め", "ビター", "苦い") {
 		v := clampScore(in.Pref.Bitterness + 1)
 		out.Bitterness = &v
@@ -50,13 +50,11 @@ func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (useca
 		out.Bitterness = &v
 	}
 
-	// aroma
 	if containsAny(text, "香り強め", "香り高い", "華やか") {
 		v := clampScore(in.Pref.Aroma + 1)
 		out.Aroma = &v
 	}
 
-	// method
 	if containsAny(text, "ミルク", "ラテ", "カフェオレ") {
 		method := entity.MethodMilk
 		out.Method = &method
@@ -74,7 +72,6 @@ func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (useca
 		out.Method = &method
 	}
 
-	// mood
 	if containsAny(text, "朝", "朝向け", "朝に飲みたい") {
 		mood := entity.MoodMorning
 		out.Mood = &mood
@@ -92,7 +89,6 @@ func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (useca
 		out.Mood = &mood
 	}
 
-	// scene
 	if containsAny(text, "休憩", "一息") {
 		scene := entity.SceneBreak
 		out.Scene = &scene
@@ -110,7 +106,6 @@ func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (useca
 		out.Scene = &scene
 	}
 
-	// temp_pref
 	if containsAny(text, "ホット", "温かい") {
 		temp := entity.TempHot
 		out.TempPref = &temp
@@ -120,7 +115,6 @@ func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (useca
 		out.TempPref = &temp
 	}
 
-	// excludes
 	excludes := make([]string, 0, 2)
 	if containsAny(text, "酸味なし", "酸味いらない") {
 		excludes = append(excludes, "acidic")
@@ -132,17 +126,25 @@ func (m *MockClient) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (useca
 		out.Excludes = excludes
 	}
 
-	// note
 	if trimmed := strings.TrimSpace(in.InputText); trimmed != "" {
 		note := trimmed
 		out.Note = &note
 	}
 
-	return out, nil
+	return out, usecase.GeminiAuditMeta{
+		Provider:   "gemini_mock",
+		Model:      "mock",
+		Status:     "success",
+		DurationMS: 0,
+		ErrorType:  "",
+	}, nil
 }
 
 // suggestionごとの簡単な理由文を返す。
-func (m *MockClient) BuildReasons(in usecase.GeminiReasonIn) ([]usecase.GeminiReason, error) {
+// ExplainLevelに応じて少し文体を変える。
+func (m *MockClient) BuildReasons(
+	in usecase.GeminiReasonIn,
+) ([]usecase.GeminiReason, usecase.GeminiAuditMeta, error) {
 	reasons := make([]usecase.GeminiReason, 0, len(in.Suggestions))
 
 	for _, s := range in.Suggestions {
@@ -155,11 +157,20 @@ func (m *MockClient) BuildReasons(in usecase.GeminiReasonIn) ([]usecase.GeminiRe
 		})
 	}
 
-	return reasons, nil
+	return reasons, usecase.GeminiAuditMeta{
+		Provider:   "gemini_mock",
+		Model:      "mock",
+		Status:     "success",
+		DurationMS: 0,
+		ErrorType:  "",
+	}, nil
 }
 
-// 追加質問候補を返す。
-func (m *MockClient) BuildFollowups(in usecase.GeminiFollowupIn) ([]string, error) {
+// 追加質問候補を最大3件返す。
+// 今のPrefで未確定な観点を優先して質問化する。
+func (m *MockClient) BuildFollowups(
+	in usecase.GeminiFollowupIn,
+) ([]string, usecase.GeminiAuditMeta, error) {
 	out := make([]string, 0, 3)
 
 	if in.Pref.Method == "" {
@@ -174,18 +185,25 @@ func (m *MockClient) BuildFollowups(in usecase.GeminiFollowupIn) ([]string, erro
 	if len(out) < 3 {
 		out = append(out, "もう少し軽め、酸味弱め、ミルク向けなどの希望はありますか？")
 	}
-
 	if len(out) > 3 {
-		return out[:3], nil
+		out = out[:3]
 	}
 
-	return out, nil
+	return out, usecase.GeminiAuditMeta{
+		Provider:   "gemini_mock",
+		Model:      "mock",
+		Status:     "success",
+		DurationMS: 0,
+		ErrorType:  "",
+	}, nil
 }
 
+// 比較しやすいように文字列を小文字・前後trimに寄せる。
 func normalize(v string) string {
 	return strings.ToLower(strings.TrimSpace(v))
 }
 
+// 文字列が候補語のどれかを含むかを返す。
 func containsAny(text string, words ...string) bool {
 	for _, word := range words {
 		if strings.Contains(text, strings.ToLower(word)) {
@@ -195,6 +213,7 @@ func containsAny(text string, words ...string) bool {
 	return false
 }
 
+// 1~5の範囲に丸める。
 func clampScore(v int) int {
 	if v < 1 {
 		return 1
@@ -205,50 +224,59 @@ func clampScore(v int) int {
 	return v
 }
 
+// beanIDに対応するBean名を返す。見つからない場合は空文字を返す。
 func findBeanNameByID(beans []entity.Bean, beanID uint) string {
 	for _, bean := range beans {
 		if bean.ID == beanID {
 			return bean.Name
 		}
 	}
-	return "この候補"
+	return ""
 }
 
-func buildReasonText(beanName string, pref entity.Pref, explainLevel string) string {
+// モック用の簡単な理由文を組み立てる。easy の場合は、よりやさしい表現にする。
+func buildReasonText(
+	beanName string,
+	pref entity.Pref,
+	explainLevel string,
+) string {
+	name := beanName
+	if strings.TrimSpace(name) == "" {
+		name = "この豆"
+	}
+
 	if explainLevel == "easy" {
-		return beanName + " は、今ほしい味に近く、飲みやすい候補です。"
+		return name + " は、今の好みに近くて飲みやすそうです。"
 	}
 
 	parts := make([]string, 0, 3)
 
 	if pref.Body >= 4 {
-		parts = append(parts, "コクのある方向")
-	} else if pref.Body > 0 {
-		parts = append(parts, "重すぎない飲み口")
+		parts = append(parts, "コク寄り")
+	} else if pref.Body <= 2 {
+		parts = append(parts, "軽め")
 	}
 
 	if pref.Acidity >= 4 {
-		parts = append(parts, "明るい酸味")
-	} else if pref.Acidity > 0 && pref.Acidity <= 2 {
-		parts = append(parts, "酸味を抑えた方向")
+		parts = append(parts, "酸味寄り")
+	} else if pref.Acidity <= 2 {
+		parts = append(parts, "酸味控えめ")
 	}
 
-	if pref.Method == entity.MethodMilk {
-		parts = append(parts, "ミルクと合わせやすい")
-	}
-	if pref.Method == entity.MethodDrip {
-		parts = append(parts, "ドリップで香りを出しやすい")
-	}
-	if pref.Mood == entity.MoodMorning {
-		parts = append(parts, "朝に合わせやすい")
-	}
-	if pref.Mood == entity.MoodRelax {
-		parts = append(parts, "落ち着きたい場面に合いやすい")
+	if pref.Bitterness >= 4 {
+		parts = append(parts, "苦味寄り")
+	} else if pref.Bitterness <= 2 {
+		parts = append(parts, "苦味控えめ")
 	}
 
 	if len(parts) == 0 {
-		return beanName + " は、今の条件に近いバランスの候補です。"
+		return name + " は、今の条件に近い候補です。"
 	}
 
-	return beanName + " は、" + strings.Join(parts, "、") + "候補です。"
+	return name + " は、" + strings.Join(parts, "で、") + "の好みに合いやすい候補です。"
+}
+
+// 監査用にprovider/modelを返す。
+func (m *MockClient) Info() (string, string) {
+	return "gemini_mock", "mock"
 }
