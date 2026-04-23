@@ -3,7 +3,6 @@ package usecase
 import (
 	"coffee-spa/usecase/port"
 	"fmt"
-	"time"
 )
 
 // Token Bucket1件分のルール
@@ -29,6 +28,8 @@ type RateLimiter interface {
 type RateLimitUC struct {
 	// usecaseは実装詳細を持たず、Allowだけ呼ぶ。
 	store port.RateLimitStore
+	//現在時刻
+	clock Clock
 	// signupをIPで制限するためのルール。
 	signupIP RateRule
 	// loginをemailで制限するためのルール。
@@ -56,6 +57,7 @@ type RateLimitUC struct {
 // rate limitのusecaseを生成する。
 func NewRateLimitUC(
 	store port.RateLimitStore,
+	clock Clock,
 	signupIP RateRule,
 	loginIP RateRule,
 	loginMail RateRule,
@@ -68,6 +70,7 @@ func NewRateLimitUC(
 ) RateLimiter {
 	return &RateLimitUC{
 		store:        store,
+		clock:        clock,
 		signupIP:     signupIP,
 		loginIP:      loginIP,
 		loginMail:    loginMail,
@@ -130,7 +133,9 @@ func (u *RateLimitUC) allow(key string, rule RateRule) (bool, int, error) {
 	if u == nil || u.store == nil {
 		return false, 0, fmt.Errorf("rate limit store is nil")
 	}
-
+	if u.clock == nil {
+		return false, 0, fmt.Errorf("rate limit clock is nil")
+	}
 	if key == "" {
 		return false, 0, fmt.Errorf("rate limit key is empty")
 	}
@@ -150,7 +155,7 @@ func (u *RateLimitUC) allow(key string, rule RateRule) (bool, int, error) {
 		rule.Rate,
 		rule.Capacity,
 		rule.Cost,
-		time.Now(),
+		u.clock.Now(),
 	)
 	if err != nil {
 		return false, 0, err

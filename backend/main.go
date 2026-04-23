@@ -102,6 +102,7 @@ func main() {
 		repos.userRepo,
 		c.FEURL,
 		ucs.wsLimiter,
+		ucs.rlUC,
 	)
 
 	log.Fatal(e.Start(":" + c.Port))
@@ -272,6 +273,7 @@ func newUsecases(
 	// 認証系とWS系で共通のrate limiter を生成。
 	rlUC := usecase.NewRateLimitUC(
 		repos.rlStore,
+		svcs.clock,
 		signupIPRule,
 		loginIPRule,
 		loginMailRule,

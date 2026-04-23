@@ -11,3 +11,6 @@ var (
 	ErrRateLimited  = apperr.ErrRateLimited
 	ErrInternal     = apperr.ErrInternal
 )
+
+// 429用の詳細付きエラー。
+type RateLimitedError = apperr.RateLimitedError

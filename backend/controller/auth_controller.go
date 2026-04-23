@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"os"
-	"strconv"
+
 	"strings"
 
 	"coffee-spa/entity"
@@ -139,14 +139,6 @@ func (ctl *AuthCtl) Signup(c echo.Context) error {
 		return writeErr(c, ErrInvalidRequest)
 	}
 
-	allowed, retryAfterSec, err := ctl.rl.AllowSignup(clientIP(c))
-	if err != nil {
-		return writeErr(c, err)
-	}
-	if !allowed {
-		return writeRateLimited(c, retryAfterSec)
-	}
-
 	out, err := ctl.uc.Signup(usecase.SignupIn{
 		Email:    req.Email,
 		Password: req.Password,
@@ -196,7 +188,7 @@ func (ctl *AuthCtl) ResendVerify(c echo.Context) error {
 		return writeErr(c, err)
 	}
 	if !allowed {
-		return writeRateLimited(c, retryAfterSec)
+		return writeErr(c, usecase.RateLimitedError{RetryAfterSec: retryAfterSec})
 	}
 
 	// 2段目: email 単位の制限。
@@ -207,7 +199,7 @@ func (ctl *AuthCtl) ResendVerify(c echo.Context) error {
 		return writeErr(c, err)
 	}
 	if !allowed {
-		return writeRateLimited(c, retryAfterSec)
+		return writeErr(c, usecase.RateLimitedError{RetryAfterSec: retryAfterSec})
 	}
 
 	err = ctl.uc.ResendVerify(usecase.ResendVerifyIn{
@@ -238,7 +230,7 @@ func (ctl *AuthCtl) Login(c echo.Context) error {
 		return writeErr(c, err)
 	}
 	if !allowed {
-		return writeRateLimited(c, retryAfterSec)
+		return writeErr(c, usecase.RateLimitedError{RetryAfterSec: retryAfterSec})
 	}
 
 	// 2:email単位の制限。
@@ -249,7 +241,7 @@ func (ctl *AuthCtl) Login(c echo.Context) error {
 		return writeErr(c, err)
 	}
 	if !allowed {
-		return writeRateLimited(c, retryAfterSec)
+		return writeErr(c, usecase.RateLimitedError{RetryAfterSec: retryAfterSec})
 	}
 
 	out, err := ctl.uc.Login(usecase.LoginIn{
@@ -292,7 +284,7 @@ func (ctl *AuthCtl) Refresh(c echo.Context) error {
 		return writeErr(c, err)
 	}
 	if !allowed {
-		return writeRateLimited(c, retryAfterSec)
+		return writeErr(c, usecase.RateLimitedError{RetryAfterSec: retryAfterSec})
 	}
 
 	out, err := ctl.uc.Refresh(usecase.RefreshIn{
@@ -369,7 +361,7 @@ func (ctl *AuthCtl) ForgotPw(c echo.Context) error {
 		return writeErr(c, err)
 	}
 	if !allowed {
-		return writeRateLimited(c, retryAfterSec)
+		return writeErr(c, usecase.RateLimitedError{RetryAfterSec: retryAfterSec})
 	}
 
 	// 2:email
@@ -381,7 +373,7 @@ func (ctl *AuthCtl) ForgotPw(c echo.Context) error {
 		return writeErr(c, err)
 	}
 	if !allowed {
-		return writeRateLimited(c, retryAfterSec)
+		return writeErr(c, usecase.RateLimitedError{RetryAfterSec: retryAfterSec})
 	}
 
 	err = ctl.uc.ForgotPw(usecase.ForgotPwIn{
@@ -480,18 +472,6 @@ func authCookieDomain() string {
 // refresh cookieのMaxAge秒数。
 func authRefreshCookieMaxAgeSec() int {
 	return 24 * 60 * 60
-}
-
-// rate limit超過時のレスポンスを返す。
-// Retry-Afterが1以上ならheaderにも載せる。
-func writeRateLimited(c echo.Context, retryAfterSec int) error {
-	if retryAfterSec > 0 {
-		c.Response().Header().Set("Retry-After", strconv.Itoa(retryAfterSec))
-	}
-
-	return c.JSON(http.StatusTooManyRequests, map[string]string{
-		"error": "rate_limited",
-	})
 }
 
 // loginでemailをそのままRedisキーへ使わないよう、正規化してハッシュ化。

@@ -24,6 +24,7 @@ func New(
 	userRepo middleware.TokenVersionReader,
 	feURL string,
 	wsLimiter middleware.WsRateLimiter,
+	signupLimiter middleware.SignupRateLimiter,
 ) {
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestID())
@@ -36,7 +37,7 @@ func New(
 
 	// 未認証でも通すgroup。
 	public := e.Group("")
-	registerPublicAuthRoutes(public, authCtl)
+	registerPublicAuthRoutes(public, authCtl, signupLimiter)
 	registerPublicContentRoutes(public, itemCtl, srcCtl, beanCtl, recipeCtl)
 	registerPublicSearchRoutes(public, searchCtl)
 
@@ -80,9 +81,10 @@ func New(
 func registerPublicAuthRoutes(
 	g *echo.Group,
 	authCtl *controller.AuthCtl,
+	signupLimiter middleware.SignupRateLimiter,
 ) {
+	g.POST("/auth/signup", authCtl.Signup, middleware.SignupRateLimit(signupLimiter))
 	g.GET("/auth/csrf", authCtl.Csrf)
-	g.POST("/auth/signup", authCtl.Signup)
 	g.POST("/auth/verify-email", authCtl.VerifyEmail)
 	g.POST("/auth/login", authCtl.Login)
 	g.POST("/auth/password/forgot", authCtl.ForgotPw)

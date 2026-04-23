@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"coffee-spa/apperr"
 	"coffee-spa/usecase"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 )
@@ -59,6 +61,10 @@ func mapError(err error) (int, string, string) {
 // controllerから共通で使う失敗レスポンス関数
 func writeErr(c echo.Context, err error) error {
 	status, code, msg := mapError(err)
+	var rlErr apperr.RateLimitedError
+	if errors.As(err, &rlErr) && rlErr.RetryAfterSec > 0 {
+		c.Response().Header().Set("Retry-After", strconv.Itoa(rlErr.RetryAfterSec))
+	}
 
 	return c.JSON(status, ErrRes{
 		Error:   code,
