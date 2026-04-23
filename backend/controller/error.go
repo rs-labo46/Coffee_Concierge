@@ -1,10 +1,9 @@
 package controller
 
 import (
+	"coffee-spa/usecase"
 	"errors"
 	"net/http"
-
-	"coffee-spa/repository"
 
 	"github.com/labstack/echo/v4"
 )
@@ -29,27 +28,27 @@ func mapError(err error) (int, string, string) {
 		return http.StatusBadRequest, "invalid_request", "request body or query is invalid"
 
 	// 認証失敗(未ログイン、トークン不正、refresh拒否など)
-	case errors.Is(err, repository.ErrUnauthorized):
+	case errors.Is(err, usecase.ErrUnauthorized):
 		return http.StatusUnauthorized, "unauthorized", "authentication failed"
 
 	// 権限不足
-	case errors.Is(err, repository.ErrForbidden):
+	case errors.Is(err, usecase.ErrForbidden):
 		return http.StatusForbidden, "forbidden", "permission denied"
 
 	// 対象なし(存在しないidや、guest sessionの期限切れなど)
-	case errors.Is(err, repository.ErrNotFound):
+	case errors.Is(err, usecase.ErrNotFound):
 		return http.StatusNotFound, "not_found", "resource not found"
 
 	// 重複や二重操作(既存メール重複、二重保存、すでに使用済み)
-	case errors.Is(err, repository.ErrConflict):
+	case errors.Is(err, usecase.ErrConflict):
 		return http.StatusConflict, "conflict", "resource conflict"
 
 	// used済みtokenを再利用する状態の不整合
-	case errors.Is(err, repository.ErrInvalidState):
+	case errors.Is(err, usecase.ErrInvalidState):
 		return http.StatusConflict, "conflict", "resource state is invalid"
 
 	// レート制限
-	case errors.Is(err, repository.ErrRateLimited):
+	case errors.Is(err, usecase.ErrRateLimited):
 		return http.StatusTooManyRequests, "rate_limited", "too many requests"
 
 	default:

@@ -4,7 +4,9 @@ import (
 	"errors"
 	"time"
 
+	"coffee-spa/apperr"
 	"coffee-spa/entity"
+	"coffee-spa/usecase/port"
 
 	"gorm.io/gorm"
 )
@@ -14,7 +16,7 @@ type sessionRepository struct {
 	db *gorm.DB
 }
 
-func NewSessionRepository(db *gorm.DB) SessionRepository {
+func NewSessionRepository(db *gorm.DB) port.SessionRepository {
 	return &sessionRepository{
 		db: db,
 	}
@@ -23,7 +25,7 @@ func NewSessionRepository(db *gorm.DB) SessionRepository {
 // sessionを新規作成。
 func (r *sessionRepository) CreateSession(session *entity.Session) error {
 	if session == nil {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// レコードをINSERT。
@@ -31,9 +33,9 @@ func (r *sessionRepository) CreateSession(session *entity.Session) error {
 	if err != nil {
 		// unique / FK 制約違反はconflict。
 		if isDup(err) || isFK(err) {
-			return ErrConflict
+			return apperr.ErrConflict
 		}
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 
 	return nil
@@ -43,7 +45,7 @@ func (r *sessionRepository) CreateSession(session *entity.Session) error {
 func (r *sessionRepository) GetSessionByID(id uint) (*entity.Session, error) {
 	// 0 は有効な ID ではありません。
 	if id == 0 {
-		return nil, ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
 
 	var session entity.Session
@@ -52,9 +54,9 @@ func (r *sessionRepository) GetSessionByID(id uint) (*entity.Session, error) {
 	err := r.db.First(&session, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return nil, apperr.ErrNotFound
 		}
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return &session, nil
@@ -69,7 +71,7 @@ func (r *sessionRepository) GetGuestSessionByID(
 ) (*entity.Session, error) {
 	// IDまたはsessionKeyHashが不正なら対象なし。
 	if id == 0 || sessionKeyHash == "" {
-		return nil, ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
 
 	var session entity.Session
@@ -85,19 +87,19 @@ func (r *sessionRepository) GetGuestSessionByID(
 		Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return nil, apperr.ErrNotFound
 		}
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return &session, nil
 }
 
 // 認証ユーザーの session履歴一覧を返す。
-func (r *sessionRepository) ListHistory(q HistoryQ) ([]entity.Session, error) {
+func (r *sessionRepository) ListHistory(q port.HistoryQ) ([]entity.Session, error) {
 	// userID がなければ認証ユーザーの履歴として扱えません。
 	if q.UserID == 0 {
-		return nil, ErrUnauthorized
+		return nil, apperr.ErrUnauthorized
 	}
 
 	// limitは未指定なら20、上限は100に。
@@ -128,7 +130,7 @@ func (r *sessionRepository) ListHistory(q HistoryQ) ([]entity.Session, error) {
 		Find(&sessions).
 		Error
 	if err != nil {
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return sessions, nil
@@ -137,7 +139,7 @@ func (r *sessionRepository) ListHistory(q HistoryQ) ([]entity.Session, error) {
 // sessionをclosedに更新。
 func (r *sessionRepository) CloseSession(id uint) error {
 	if id == 0 {
-		return ErrNotFound
+		return apperr.ErrNotFound
 	}
 
 	now := time.Now()
@@ -155,10 +157,10 @@ func (r *sessionRepository) CloseSession(id uint) error {
 		Select("status", "updated_at").
 		Updates(&session)
 	if res.Error != nil {
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 	if res.RowsAffected == 0 {
-		return ErrNotFound
+		return apperr.ErrNotFound
 	}
 
 	return nil
@@ -167,7 +169,7 @@ func (r *sessionRepository) CloseSession(id uint) error {
 // turnを新規作成。
 func (r *sessionRepository) CreateTurn(turn *entity.Turn) error {
 	if turn == nil {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// レコードをINSERT 。
@@ -175,9 +177,9 @@ func (r *sessionRepository) CreateTurn(turn *entity.Turn) error {
 	if err != nil {
 		// FK制約違反はsession不整合のため、conflict。
 		if isFK(err) {
-			return ErrConflict
+			return apperr.ErrConflict
 		}
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 
 	return nil
@@ -186,7 +188,7 @@ func (r *sessionRepository) CreateTurn(turn *entity.Turn) error {
 // session配下のturn一覧を時系列順で返す。
 func (r *sessionRepository) ListTurns(sessionID uint) ([]entity.Turn, error) {
 	if sessionID == 0 {
-		return nil, ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
 
 	var turns []entity.Turn
@@ -200,7 +202,7 @@ func (r *sessionRepository) ListTurns(sessionID uint) ([]entity.Turn, error) {
 		Find(&turns).
 		Error
 	if err != nil {
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return turns, nil
@@ -209,7 +211,7 @@ func (r *sessionRepository) ListTurns(sessionID uint) ([]entity.Turn, error) {
 // prefを新規作成。
 func (r *sessionRepository) CreatePref(pref *entity.Pref) error {
 	if pref == nil {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// レコードをINSERT 。
@@ -217,9 +219,9 @@ func (r *sessionRepository) CreatePref(pref *entity.Pref) error {
 	if err != nil {
 		// unique / FK 制約違反はconflict。
 		if isDup(err) || isFK(err) {
-			return ErrConflict
+			return apperr.ErrConflict
 		}
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 
 	return nil
@@ -229,7 +231,7 @@ func (r *sessionRepository) CreatePref(pref *entity.Pref) error {
 func (r *sessionRepository) UpdatePref(pref *entity.Pref) error {
 
 	if pref == nil || pref.ID == 0 {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// 更新可能カラムだけを明示して更新。
@@ -255,9 +257,9 @@ func (r *sessionRepository) UpdatePref(pref *entity.Pref) error {
 		Error
 	if err != nil {
 		if isDup(err) || isFK(err) {
-			return ErrConflict
+			return apperr.ErrConflict
 		}
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 
 	return nil
@@ -266,7 +268,7 @@ func (r *sessionRepository) UpdatePref(pref *entity.Pref) error {
 // sessionに紐づくprefを1件取得。
 func (r *sessionRepository) GetPrefBySessionID(sessionID uint) (*entity.Pref, error) {
 	if sessionID == 0 {
-		return nil, ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
 
 	var pref entity.Pref
@@ -278,9 +280,9 @@ func (r *sessionRepository) GetPrefBySessionID(sessionID uint) (*entity.Pref, er
 		Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return nil, apperr.ErrNotFound
 		}
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return &pref, nil
@@ -292,7 +294,7 @@ func (r *sessionRepository) ReplaceSuggestions(
 	suggestions []entity.Suggestion,
 ) error {
 	if sessionID == 0 {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// delete → insertは途中失敗すると壊れるためtransactionで。
@@ -302,7 +304,7 @@ func (r *sessionRepository) ReplaceSuggestions(
 			Where("session_id = ?", sessionID).
 			Delete(&entity.Suggestion{}).
 			Error; err != nil {
-			return ErrInternal
+			return apperr.ErrInternal
 		}
 
 		// 新しいsuggestionsが空なら削除だけで終了。
@@ -319,9 +321,9 @@ func (r *sessionRepository) ReplaceSuggestions(
 		// 新しいsuggestionsを一括でINSERT 。
 		if err := tx.Create(&suggestions).Error; err != nil {
 			if isDup(err) || isFK(err) {
-				return ErrConflict
+				return apperr.ErrConflict
 			}
-			return ErrInternal
+			return apperr.ErrInternal
 		}
 
 		return nil
@@ -331,7 +333,7 @@ func (r *sessionRepository) ReplaceSuggestions(
 // sessionに紐づくsuggestion一覧を順位順で返す。
 func (r *sessionRepository) ListSuggestions(sessionID uint) ([]entity.Suggestion, error) {
 	if sessionID == 0 {
-		return nil, ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
 
 	var suggestions []entity.Suggestion
@@ -348,7 +350,7 @@ func (r *sessionRepository) ListSuggestions(sessionID uint) ([]entity.Suggestion
 		Find(&suggestions).
 		Error
 	if err != nil {
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return suggestions, nil
@@ -357,7 +359,7 @@ func (r *sessionRepository) ListSuggestions(sessionID uint) ([]entity.Suggestion
 // suggestionを1件取得。
 func (r *sessionRepository) GetSuggestionByID(id uint) (*entity.Suggestion, error) {
 	if id == 0 {
-		return nil, ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
 
 	var suggestion entity.Suggestion
@@ -372,9 +374,9 @@ func (r *sessionRepository) GetSuggestionByID(id uint) (*entity.Suggestion, erro
 		Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return nil, apperr.ErrNotFound
 		}
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return &suggestion, nil

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
 )
 
 // Itemの作成・取得・一覧・Topを扱う。
@@ -28,16 +28,16 @@ type CreateItemIn struct {
 }
 
 type itemUsecase struct {
-	items   repository.ItemRepository
-	sources repository.SourceRepository
-	audits  repository.AuditRepository
+	items   port.ItemRepository
+	sources port.SourceRepository
+	audits  port.AuditRepository
 	val     ItemVal
 }
 
 func NewItemUsecase(
-	items repository.ItemRepository,
-	sources repository.SourceRepository,
-	audits repository.AuditRepository,
+	items port.ItemRepository,
+	sources port.SourceRepository,
+	audits port.AuditRepository,
 	val ItemVal,
 ) ItemUC {
 	return &itemUsecase{
@@ -53,7 +53,7 @@ func NewItemUsecase(
 // source_idの存在確認を先に行う。
 func (u *itemUsecase) Create(actor entity.Actor, in CreateItemIn) (entity.Item, error) {
 	if actor.Role != entity.RoleAdmin {
-		return entity.Item{}, repository.ErrForbidden
+		return entity.Item{}, ErrForbidden
 	}
 
 	if err := u.val.Create(in); err != nil {
@@ -113,7 +113,7 @@ func (u *itemUsecase) List(q entity.ItemQ) ([]entity.Item, error) {
 		return nil, err
 	}
 
-	out, err := u.items.List(repository.ItemListQ{
+	out, err := u.items.List(port.ItemListQ{
 		Q:      q.Q,
 		Kind:   q.Kind,
 		Limit:  q.Limit,

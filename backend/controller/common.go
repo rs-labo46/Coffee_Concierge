@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase"
 
 	"github.com/labstack/echo/v4"
 )
@@ -51,7 +51,7 @@ func actorFromCtx(c echo.Context) *entity.Actor {
 func requireActor(c echo.Context) (*entity.Actor, error) {
 	a := actorFromCtx(c)
 	if a == nil {
-		return nil, repository.ErrUnauthorized
+		return nil, usecase.ErrUnauthorized
 	}
 	return a, nil
 }

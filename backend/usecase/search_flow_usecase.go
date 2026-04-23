@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
 )
 
 // 対話検索フロー(session開始、初期条件設定、発話追加、条件差分更新、再検索)
@@ -138,11 +138,11 @@ type Ranker interface {
 
 // searchFlowUsecase は SearchFlowUC の実装。
 type searchFlowUsecase struct {
-	sessions repository.SessionRepository
-	beans    repository.BeanRepository
-	recipes  repository.RecipeRepository
-	items    repository.ItemRepository
-	audits   repository.AuditRepository
+	sessions port.SessionRepository
+	beans    port.BeanRepository
+	recipes  port.RecipeRepository
+	items    port.ItemRepository
+	audits   port.AuditRepository
 	// 入力検証はusecase側。
 	val SearchVal
 	// 候補のランキング。
@@ -156,11 +156,11 @@ type searchFlowUsecase struct {
 }
 
 func NewSearchFlowUsecase(
-	sessions repository.SessionRepository,
-	beans repository.BeanRepository,
-	recipes repository.RecipeRepository,
-	items repository.ItemRepository,
-	audits repository.AuditRepository,
+	sessions port.SessionRepository,
+	beans port.BeanRepository,
+	recipes port.RecipeRepository,
+	items port.ItemRepository,
+	audits port.AuditRepository,
 	val SearchVal,
 	ranker Ranker,
 	gemini GeminiClient,
@@ -242,9 +242,9 @@ func (u *searchFlowUsecase) SetPref(in SetPrefIn) (SetPrefOut, error) {
 	}
 
 	if _, err := u.sessions.GetPrefBySessionID(session.ID); err == nil {
-		return SetPrefOut{}, repository.ErrConflict
+		return SetPrefOut{}, ErrConflict
 	}
-	if err != nil && !errorsIs(err, repository.ErrNotFound) {
+	if err != nil && !errorsIs(err, ErrNotFound) {
 		return SetPrefOut{}, err
 	}
 
@@ -824,19 +824,19 @@ func (u *searchFlowUsecase) resolveWritableSession(
 			return nil, err
 		}
 		if session.UserID == nil {
-			return nil, repository.ErrForbidden
+			return nil, ErrForbidden
 		}
 		if *session.UserID != actor.UserID {
-			return nil, repository.ErrForbidden
+			return nil, ErrForbidden
 		}
 		if session.Status != entity.SessionActive {
-			return nil, repository.ErrConflict
+			return nil, ErrConflict
 		}
 		return session, nil
 	}
 
 	if sessionKey == "" {
-		return nil, repository.ErrUnauthorized
+		return nil, ErrUnauthorized
 	}
 
 	session, err := u.sessions.GetGuestSessionByID(
@@ -848,7 +848,7 @@ func (u *searchFlowUsecase) resolveWritableSession(
 		return nil, err
 	}
 	if session.Status != entity.SessionActive {
-		return nil, repository.ErrConflict
+		return nil, ErrConflict
 	}
 	return session, nil
 }

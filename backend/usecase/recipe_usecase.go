@@ -1,10 +1,9 @@
 package usecase
 
 import (
-	"encoding/json"
-
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
+	"encoding/json"
 )
 
 // Recipeの作成・更新・取得・一覧を扱う。
@@ -54,16 +53,16 @@ type UpdateRecipeIn struct {
 }
 
 type recipeUsecase struct {
-	recipes repository.RecipeRepository
-	beans   repository.BeanRepository
-	audits  repository.AuditRepository
+	recipes port.RecipeRepository
+	beans   port.BeanRepository
+	audits  port.AuditRepository
 	val     RecipeVal
 }
 
 func NewRecipeUsecase(
-	recipes repository.RecipeRepository,
-	beans repository.BeanRepository,
-	audits repository.AuditRepository,
+	recipes port.RecipeRepository,
+	beans port.BeanRepository,
+	audits port.AuditRepository,
 	val RecipeVal,
 ) RecipeUC {
 	return &recipeUsecase{
@@ -77,7 +76,7 @@ func NewRecipeUsecase(
 // Recipeを新規作成する。adminのみ許可する。bean_idの存在確認を先に行う。
 func (u *recipeUsecase) Create(actor entity.Actor, in CreateRecipeIn) (entity.Recipe, error) {
 	if actor.Role != entity.RoleAdmin {
-		return entity.Recipe{}, repository.ErrForbidden
+		return entity.Recipe{}, ErrForbidden
 	}
 
 	if err := u.val.Create(in); err != nil {
@@ -124,7 +123,7 @@ func (u *recipeUsecase) Create(actor entity.Actor, in CreateRecipeIn) (entity.Re
 // Recipeを更新する + adminのみ許可する + 更新前にbeanの存在確認を行う。
 func (u *recipeUsecase) Update(actor entity.Actor, in UpdateRecipeIn) (entity.Recipe, error) {
 	if actor.Role != entity.RoleAdmin {
-		return entity.Recipe{}, repository.ErrForbidden
+		return entity.Recipe{}, ErrForbidden
 	}
 
 	if err := u.val.Update(in); err != nil {
@@ -191,7 +190,7 @@ func (u *recipeUsecase) List(in RecipeListIn) ([]entity.Recipe, error) {
 		return nil, err
 	}
 
-	out, err := u.recipes.List(repository.RecipeListQ{
+	out, err := u.recipes.List(port.RecipeListQ{
 		BeanID:   in.BeanID,
 		Method:   in.Method,
 		TempPref: in.TempPref,

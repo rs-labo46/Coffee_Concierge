@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"coffee-spa/apperr"
 	"coffee-spa/entity"
+	"coffee-spa/usecase/port"
 
 	"gorm.io/gorm"
 )
@@ -10,30 +12,30 @@ type auditRepository struct {
 	db *gorm.DB
 }
 
-func NewAuditRepository(db *gorm.DB) AuditRepository {
+func NewAuditRepository(db *gorm.DB) port.AuditRepository {
 	return &auditRepository{db: db}
 }
 
 // audit_logsに1件保存する。
 func (r *auditRepository) Create(log *entity.AuditLog) error {
 	if log == nil {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// INSERTを実行する。
 	err := r.db.Create(log).Error
 	if err != nil {
 		if isFK(err) {
-			return ErrConflict
+			return apperr.ErrConflict
 		}
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 
 	return nil
 }
 
 // 監査ログ一覧
-func (r *auditRepository) List(q AuditListQ) ([]entity.AuditLog, error) {
+func (r *auditRepository) List(q port.AuditListQ) ([]entity.AuditLog, error) {
 	var logs []entity.AuditLog
 
 	// ベースクエリを作る。
@@ -70,7 +72,7 @@ func (r *auditRepository) List(q AuditListQ) ([]entity.AuditLog, error) {
 		Find(&logs).
 		Error
 	if err != nil {
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return logs, nil

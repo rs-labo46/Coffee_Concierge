@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
 )
 
 type AuthUC interface {
@@ -118,11 +118,11 @@ type Mailer interface {
 }
 
 type authUsecase struct {
-	users    repository.UserRepository
-	verifies repository.EmailVerifyRepository
-	resets   repository.PwResetRepository
-	rts      repository.RtRepository
-	audits   repository.AuditRepository
+	users    port.UserRepository
+	verifies port.EmailVerifyRepository
+	resets   port.PwResetRepository
+	rts      port.RtRepository
+	audits   port.AuditRepository
 
 	val      AuthVal
 	hasher   PwHasher
@@ -138,11 +138,11 @@ type authUsecase struct {
 }
 
 func NewAuthUsecase(
-	users repository.UserRepository,
-	verifies repository.EmailVerifyRepository,
-	resets repository.PwResetRepository,
-	rts repository.RtRepository,
-	audits repository.AuditRepository,
+	users port.UserRepository,
+	verifies port.EmailVerifyRepository,
+	resets port.PwResetRepository,
+	rts port.RtRepository,
+	audits port.AuditRepository,
 	val AuthVal,
 	hasher PwHasher,
 	tokenSvc TokenSvc,
@@ -181,7 +181,7 @@ func (u *authUsecase) Signup(in SignupIn) (SignupOut, error) {
 
 	passHash, err := u.hasher.Hash(in.Password)
 	if err != nil {
-		return SignupOut{}, repository.ErrInternal
+		return SignupOut{}, ErrInternal
 	}
 
 	now := u.clock.Now()
@@ -261,10 +261,10 @@ func (u *authUsecase) VerifyEmail(in VerifyEmailIn) error {
 	now := u.clock.Now()
 
 	if v.UsedAt != nil {
-		return repository.ErrConflict
+		return ErrConflict
 	}
 	if !v.ExpiresAt.After(now) {
-		return repository.ErrInvalidState
+		return ErrInvalidState
 	}
 
 	user, err := u.users.GetByID(v.UserID)
@@ -304,8 +304,8 @@ func (u *authUsecase) Login(in LoginIn) (LoginOut, error) {
 
 	user, err := u.users.GetByEmail(in.Email)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return LoginOut{}, repository.ErrUnauthorized
+		if errors.Is(err, ErrNotFound) {
+			return LoginOut{}, ErrUnauthorized
 		}
 		return LoginOut{}, err
 	}
@@ -321,17 +321,17 @@ func (u *authUsecase) Login(in LoginIn) (LoginOut, error) {
 				"reason":  "password_mismatch",
 			},
 		)
-		return LoginOut{}, repository.ErrUnauthorized
+		return LoginOut{}, ErrUnauthorized
 	}
 
 	accessToken, err := u.tokenSvc.SignAccess(*user)
 	if err != nil {
-		return LoginOut{}, repository.ErrInternal
+		return LoginOut{}, ErrInternal
 	}
 
 	refreshPlain, refreshHash, err := u.rtSvc.New()
 	if err != nil {
-		return LoginOut{}, repository.ErrInternal
+		return LoginOut{}, ErrInternal
 	}
 
 	now := u.clock.Now()
@@ -381,8 +381,8 @@ func (u *authUsecase) Refresh(in RefreshIn) (RefreshOut, error) {
 
 	current, err := u.rts.GetByTokenHash(tokenHash)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return RefreshOut{}, repository.ErrUnauthorized
+		if errors.Is(err, ErrNotFound) {
+			return RefreshOut{}, ErrUnauthorized
 		}
 		return RefreshOut{}, err
 	}
@@ -390,10 +390,10 @@ func (u *authUsecase) Refresh(in RefreshIn) (RefreshOut, error) {
 	now := u.clock.Now()
 
 	if current.RevokedAt != nil {
-		return RefreshOut{}, repository.ErrUnauthorized
+		return RefreshOut{}, ErrUnauthorized
 	}
 	if !current.ExpiresAt.After(now) {
-		return RefreshOut{}, repository.ErrUnauthorized
+		return RefreshOut{}, ErrUnauthorized
 	}
 	if current.UsedAt != nil {
 		_ = u.rts.RevokeFamily(current.FamilyID, now)
@@ -413,7 +413,7 @@ func (u *authUsecase) Refresh(in RefreshIn) (RefreshOut, error) {
 			)
 		}
 
-		return RefreshOut{}, repository.ErrUnauthorized
+		return RefreshOut{}, ErrUnauthorized
 	}
 
 	user, err := u.users.GetByID(current.UserID)
@@ -423,7 +423,7 @@ func (u *authUsecase) Refresh(in RefreshIn) (RefreshOut, error) {
 
 	newPlain, newHash, err := u.rtSvc.New()
 	if err != nil {
-		return RefreshOut{}, repository.ErrInternal
+		return RefreshOut{}, ErrInternal
 	}
 
 	next := &entity.Rt{
@@ -450,7 +450,7 @@ func (u *authUsecase) Refresh(in RefreshIn) (RefreshOut, error) {
 
 	accessToken, err := u.tokenSvc.SignAccess(*user)
 	if err != nil {
-		return RefreshOut{}, repository.ErrInternal
+		return RefreshOut{}, ErrInternal
 	}
 
 	u.writeAudit(
@@ -481,14 +481,14 @@ func (u *authUsecase) Logout(actor entity.Actor, refreshToken string) error {
 
 	rt, err := u.rts.GetByTokenHash(tokenHash)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return repository.ErrUnauthorized
+		if errors.Is(err, ErrNotFound) {
+			return ErrUnauthorized
 		}
 		return err
 	}
 
 	if rt.UserID != actor.UserID {
-		return repository.ErrForbidden
+		return ErrForbidden
 	}
 
 	now := u.clock.Now()
@@ -518,7 +518,7 @@ func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
 	}
 	user, err := u.users.GetByEmail(in.Email)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			// 存在有無は外に漏らさない。
 			return nil
 		}
@@ -577,7 +577,7 @@ func (u *authUsecase) ResendVerify(in ResendVerifyIn) error {
 	}
 	user, err := u.users.GetByEmail(in.Email)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			// 存在有無は外に漏らさない。
 			return nil
 		}
@@ -652,10 +652,10 @@ func (u *authUsecase) ResetPw(in ResetPwIn) error {
 	now := u.clock.Now()
 
 	if reset.UsedAt != nil {
-		return repository.ErrConflict
+		return ErrConflict
 	}
 	if !reset.ExpiresAt.After(now) {
-		return repository.ErrInvalidState
+		return ErrInvalidState
 	}
 
 	user, err := u.users.GetByID(reset.UserID)
@@ -665,7 +665,7 @@ func (u *authUsecase) ResetPw(in ResetPwIn) error {
 
 	passHash, err := u.hasher.Hash(in.Password)
 	if err != nil {
-		return repository.ErrInternal
+		return ErrInternal
 	}
 
 	user.PassHash = passHash

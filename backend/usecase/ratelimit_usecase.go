@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"coffee-spa/usecase/port"
 	"fmt"
 	"time"
 )
@@ -10,17 +11,6 @@ type RateRule struct {
 	Rate     float64
 	Capacity float64
 	Cost     float64
-}
-
-// usecaseはRedisの実装を知らず、repositoryに依存する。
-type RateLimitStore interface {
-	Allow(
-		key string,
-		rate float64,
-		capacity float64,
-		cost float64,
-		now time.Time,
-	) (allowed bool, retryAfterSec int, err error)
 }
 
 // controllerやmiddlewareから見たusecaseの入口でどの種類の制限かを表す。
@@ -38,7 +28,7 @@ type RateLimiter interface {
 
 type RateLimitUC struct {
 	// usecaseは実装詳細を持たず、Allowだけ呼ぶ。
-	store RateLimitStore
+	store port.RateLimitStore
 	// signupをIPで制限するためのルール。
 	signupIP RateRule
 	// loginをemailで制限するためのルール。
@@ -65,7 +55,7 @@ type RateLimitUC struct {
 
 // rate limitのusecaseを生成する。
 func NewRateLimitUC(
-	store RateLimitStore,
+	store port.RateLimitStore,
 	signupIP RateRule,
 	loginIP RateRule,
 	loginMail RateRule,

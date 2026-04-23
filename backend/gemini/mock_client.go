@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"errors"
 	"strings"
 
 	"coffee-spa/entity"
@@ -14,107 +15,144 @@ func NewMockClient() usecase.GeminiClient {
 	return &MockClient{}
 }
 
+var ErrEmptyInput = errors.New("empty input")
+
 // 発話文から簡易的な条件差分候補を返す。
 // 単純なキーワード一致で値を組み立てる。
 func (m *MockClient) BuildConditionDiff(
 	in usecase.GeminiConditionDiffIn,
 ) (usecase.GeminiConditionDiffOut, usecase.GeminiAuditMeta, error) {
 	text := normalize(in.InputText)
+	if text == "" {
+		return usecase.GeminiConditionDiffOut{}, usecase.GeminiAuditMeta{
+			Provider:   "gemini_mock",
+			Model:      "mock",
+			Status:     "error",
+			DurationMS: 0,
+			ErrorType:  "invalid_input",
+		}, ErrEmptyInput
+	}
 
 	out := usecase.GeminiConditionDiffOut{}
+	matched := false
 
-	if containsAny(text, "軽め", "軽い", "すっきり") {
+	// body
+	switch {
+	case containsAny(text, "軽め", "軽い", "すっきり"):
 		v := clampScore(in.Pref.Body - 1)
 		out.Body = &v
-	}
-	if containsAny(text, "重め", "重い", "コク", "濃い") {
+		matched = true
+	case containsAny(text, "重め", "重い", "コク", "濃い"):
 		v := clampScore(in.Pref.Body + 1)
 		out.Body = &v
+		matched = true
 	}
 
-	if containsAny(text, "酸味弱め", "酸味は弱め", "酸味少なめ", "酸味控えめ") {
+	// acidity
+	switch {
+	case containsAny(text, "酸味弱め", "酸味は弱め", "酸味少なめ", "酸味控えめ"):
 		v := clampScore(in.Pref.Acidity - 1)
 		out.Acidity = &v
-	}
-	if containsAny(text, "酸味強め", "酸味ほしい", "酸っぱいのが好き") {
+		matched = true
+	case containsAny(text, "酸味強め", "酸味ほしい", "酸っぱいのが好き"):
 		v := clampScore(in.Pref.Acidity + 1)
 		out.Acidity = &v
+		matched = true
 	}
 
-	if containsAny(text, "苦め", "ビター", "苦い") {
-		v := clampScore(in.Pref.Bitterness + 1)
-		out.Bitterness = &v
-	}
-	if containsAny(text, "苦味弱め", "苦味控えめ", "苦くない") {
+	// bitterness
+	switch {
+	case containsAny(text, "苦味弱め", "苦味控えめ", "苦くない"):
 		v := clampScore(in.Pref.Bitterness - 1)
 		out.Bitterness = &v
+		matched = true
+	case containsAny(text, "苦め", "ビター", "苦い"):
+		v := clampScore(in.Pref.Bitterness + 1)
+		out.Bitterness = &v
+		matched = true
 	}
 
-	if containsAny(text, "香り強め", "香り高い", "華やか") {
+	// aroma
+	switch {
+	case containsAny(text, "香り強め", "香り高い", "華やか"):
 		v := clampScore(in.Pref.Aroma + 1)
 		out.Aroma = &v
+		matched = true
 	}
 
-	if containsAny(text, "ミルク", "ラテ", "カフェオレ") {
+	// method
+	switch {
+	case containsAny(text, "ミルク", "ラテ", "カフェオレ"):
 		method := entity.MethodMilk
 		out.Method = &method
-	}
-	if containsAny(text, "ドリップ", "ハンドドリップ") {
+		matched = true
+	case containsAny(text, "ドリップ", "ハンドドリップ"):
 		method := entity.MethodDrip
 		out.Method = &method
-	}
-	if containsAny(text, "エスプレッソ") {
+		matched = true
+	case containsAny(text, "エスプレッソ"):
 		method := entity.MethodEspresso
 		out.Method = &method
-	}
-	if containsAny(text, "アイス") {
+		matched = true
+	case containsAny(text, "アイス"):
 		method := entity.MethodIced
 		out.Method = &method
+		matched = true
 	}
 
-	if containsAny(text, "朝", "朝向け", "朝に飲みたい") {
+	// mood
+	switch {
+	case containsAny(text, "朝", "朝向け", "朝に飲みたい"):
 		mood := entity.MoodMorning
 		out.Mood = &mood
-	}
-	if containsAny(text, "仕事中", "仕事", "集中") {
+		matched = true
+	case containsAny(text, "仕事中", "仕事", "集中"):
 		mood := entity.MoodWork
 		out.Mood = &mood
-	}
-	if containsAny(text, "夜", "夜向け") {
+		matched = true
+	case containsAny(text, "夜", "夜向け"):
 		mood := entity.MoodNight
 		out.Mood = &mood
-	}
-	if containsAny(text, "リラックス", "落ち着きたい", "ゆっくり") {
+		matched = true
+	case containsAny(text, "リラックス", "落ち着きたい", "ゆっくり"):
 		mood := entity.MoodRelax
 		out.Mood = &mood
+		matched = true
 	}
 
-	if containsAny(text, "休憩", "一息") {
+	// scene
+	switch {
+	case containsAny(text, "休憩", "一息"):
 		scene := entity.SceneBreak
 		out.Scene = &scene
-	}
-	if containsAny(text, "食後") {
+		matched = true
+	case containsAny(text, "食後"):
 		scene := entity.SceneAfterMeal
 		out.Scene = &scene
-	}
-	if containsAny(text, "作業", "仕事") {
+		matched = true
+	case containsAny(text, "作業", "仕事"):
 		scene := entity.SceneWork
 		out.Scene = &scene
-	}
-	if containsAny(text, "くつろぎ", "リラックス") {
+		matched = true
+	case containsAny(text, "くつろぎ", "リラックス"):
 		scene := entity.SceneRelax
 		out.Scene = &scene
+		matched = true
 	}
 
-	if containsAny(text, "ホット", "温かい") {
+	// temp_pref
+	switch {
+	case containsAny(text, "ホット", "温かい"):
 		temp := entity.TempHot
 		out.TempPref = &temp
-	}
-	if containsAny(text, "アイス", "冷たい") {
+		matched = true
+	case containsAny(text, "アイス", "冷たい"):
 		temp := entity.TempIce
 		out.TempPref = &temp
+		matched = true
 	}
 
+	// excludes
 	excludes := make([]string, 0, 2)
 	if containsAny(text, "酸味なし", "酸味いらない") {
 		excludes = append(excludes, "acidic")
@@ -124,11 +162,23 @@ func (m *MockClient) BuildConditionDiff(
 	}
 	if len(excludes) > 0 {
 		out.Excludes = excludes
+		matched = true
 	}
 
+	// 元の発話は補助メモとして保持。
 	if trimmed := strings.TrimSpace(in.InputText); trimmed != "" {
 		note := trimmed
 		out.Note = &note
+	}
+	// errorにはせずno-op successで返す。
+	if !matched {
+		return out, usecase.GeminiAuditMeta{
+			Provider:   "gemini_mock",
+			Model:      "mock",
+			Status:     "success",
+			DurationMS: 0,
+			ErrorType:  "",
+		}, nil
 	}
 
 	return out, usecase.GeminiAuditMeta{

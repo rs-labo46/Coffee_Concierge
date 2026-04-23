@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/repository"
 	"errors"
 	"strconv"
 	"strings"
@@ -17,6 +16,9 @@ type accessClaims struct {
 	Role string `json:"role"`
 	TV   int    `json:"tv"`
 	jwt.RegisteredClaims
+}
+type TokenVersionReader interface {
+	GetByID(id uint) (*entity.User, error)
 }
 
 // JWTAuthはBearer JWTを検証し、contextにuser_id / role / tv を入れる。
@@ -88,7 +90,7 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 
 // DBのuser.token_verとJWTのtvが一致することを確認。
 // user が存在しない場合も401。
-func TokenVersion(userRepo repository.UserRepository) echo.MiddlewareFunc {
+func TokenVersion(userRepo TokenVersionReader) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			userID, ok := c.Get("user_id").(uint)

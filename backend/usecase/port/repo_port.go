@@ -1,78 +1,9 @@
-package repository
+package port
 
 import (
-	"errors"
-	"time"
-
 	"coffee-spa/entity"
+	"time"
 )
-
-// repository共通エラー。
-var (
-	ErrNotFound     = errors.New("not found")
-	ErrConflict     = errors.New("conflict")
-	ErrForbidden    = errors.New("forbidden")
-	ErrUnauthorized = errors.New("unauthorized")
-	ErrInvalidState = errors.New("invalid state")
-	ErrRateLimited  = errors.New("rate limited")
-	ErrInternal     = errors.New("internal")
-)
-
-// Beanの一覧・検索用の条件(qはname/originなどの部分一致検索)。
-type BeanListQ struct {
-	Q      string
-	Roast  entity.Roast
-	Active *bool
-	Limit  int
-	Offset int
-}
-
-// Recipe 一覧・検索用の条件(Beanの詳細からの一覧取得と、抽出条件による検索の両方で使う)。
-type RecipeListQ struct {
-	BeanID   *uint
-	Method   entity.Method
-	TempPref entity.TempPref
-	Active   *bool
-	Limit    int
-	Offset   int
-}
-
-// Source一覧取得条件。
-type SourceListQ struct {
-	Limit  int
-	Offset int
-}
-
-// Item一覧・検索条件。
-// qはtitle/summaryの部分一致、kindはカテゴリ絞り込み。
-type ItemListQ struct {
-	Q      string
-	Kind   entity.ItemKind
-	Limit  int
-	Offset int
-}
-
-// 認証ユーザーの履歴一覧取得条件。
-type HistoryQ struct {
-	UserID uint
-	Limit  int
-	Offset int
-}
-
-// 保存済み提案一覧取得条件。
-type SavedListQ struct {
-	UserID uint
-	Limit  int
-	Offset int
-}
-
-// 監査一覧取得条件。
-type AuditListQ struct {
-	Type   string
-	UserID *uint
-	Limit  int
-	Offset int
-}
 
 // 認証・取得・token version更新に使う。
 type UserRepository interface {
@@ -108,17 +39,13 @@ type RtRepository interface {
 	DeleteExpired(now time.Time) error
 }
 
-// 主要イベントの追加と管理画面向け一覧取得。
-type AuditRepository interface {
-	Create(log *entity.AuditLog) error
-	List(q AuditListQ) ([]entity.AuditLog, error)
-}
-
-// sources。
-type SourceRepository interface {
-	Create(src *entity.Source) error
-	GetByID(id uint) (*entity.Source, error)
-	List(q SourceListQ) ([]entity.Source, error)
+// BeanのCRUDと条件検索。
+type BeanRepository interface {
+	Create(bean *entity.Bean) error
+	Update(bean *entity.Bean) error
+	GetByID(id uint) (*entity.Bean, error)
+	List(q BeanListQ) ([]entity.Bean, error)
+	SearchByPref(pref entity.Pref, limit int) ([]entity.Bean, error)
 }
 
 // 一覧、詳細、top 表示、関連Item検索。
@@ -138,15 +65,6 @@ type ItemRepository interface {
 	) ([]entity.Item, error)
 }
 
-// BeanのCRUDと条件検索。
-type BeanRepository interface {
-	Create(bean *entity.Bean) error
-	Update(bean *entity.Bean) error
-	GetByID(id uint) (*entity.Bean, error)
-	List(q BeanListQ) ([]entity.Bean, error)
-	SearchByPref(pref entity.Pref, limit int) ([]entity.Bean, error)
-}
-
 // BeanごとのRecipe選定や一覧取得。
 type RecipeRepository interface {
 	Create(recipe *entity.Recipe) error
@@ -154,6 +72,20 @@ type RecipeRepository interface {
 	GetByID(id uint) (*entity.Recipe, error)
 	List(q RecipeListQ) ([]entity.Recipe, error)
 	FindPrimaryByBean(beanID uint, method entity.Method, tempPref entity.TempPref) (*entity.Recipe, error)
+}
+
+// 主要イベントの追加と管理画面向け一覧取得。
+type AuditRepository interface {
+	Create(log *entity.AuditLog) error
+	List(q AuditListQ) ([]entity.AuditLog, error)
+}
+
+// 保存・一覧・削除。
+type SavedRepository interface {
+	Create(saved *entity.SavedSuggestion) error
+	List(q SavedListQ) ([]entity.SavedSuggestion, error)
+	DeleteByUserAndSuggestionID(userID uint, suggestionID uint) error
+	GetByUserAndSuggestionID(userID uint, suggestionID uint) (*entity.SavedSuggestion, error)
 }
 
 // sessions/turns/prefs/suggestions 検索対話フローの永続。
@@ -176,10 +108,76 @@ type SessionRepository interface {
 	GetSuggestionByID(id uint) (*entity.Suggestion, error)
 }
 
-// 保存・一覧・削除。
-type SavedRepository interface {
-	Create(saved *entity.SavedSuggestion) error
-	List(q SavedListQ) ([]entity.SavedSuggestion, error)
-	DeleteByUserAndSuggestionID(userID uint, suggestionID uint) error
-	GetByUserAndSuggestionID(userID uint, suggestionID uint) (*entity.SavedSuggestion, error)
+// sources。
+type SourceRepository interface {
+	Create(src *entity.Source) error
+	GetByID(id uint) (*entity.Source, error)
+	List(q SourceListQ) ([]entity.Source, error)
+}
+
+// Beanの一覧・検索用の条件(qはname/originなどの部分一致検索)。
+type BeanListQ struct {
+	Q      string
+	Roast  entity.Roast
+	Active *bool
+	Limit  int
+	Offset int
+}
+
+// Item一覧・検索条件。
+// qはtitle/summaryの部分一致、kindはカテゴリ絞り込み。
+type ItemListQ struct {
+	Q      string
+	Kind   entity.ItemKind
+	Limit  int
+	Offset int
+}
+
+// Recipe 一覧・検索用の条件(Beanの詳細からの一覧取得と、抽出条件による検索の両方で使う)。
+type RecipeListQ struct {
+	BeanID   *uint
+	Method   entity.Method
+	TempPref entity.TempPref
+	Active   *bool
+	Limit    int
+	Offset   int
+}
+
+// Source一覧取得条件。
+type SourceListQ struct {
+	Limit  int
+	Offset int
+}
+
+// 認証ユーザーの履歴一覧取得条件。
+type HistoryQ struct {
+	UserID uint
+	Limit  int
+	Offset int
+}
+
+// 保存済み提案一覧取得条件。
+type SavedListQ struct {
+	UserID uint
+	Limit  int
+	Offset int
+}
+
+// 監査一覧取得条件。
+type AuditListQ struct {
+	Type   string
+	UserID *uint
+	Limit  int
+	Offset int
+}
+
+// usecaseはRedisの実装を知らず、repositoryに依存する。
+type RateLimitStore interface {
+	Allow(
+		key string,
+		rate float64,
+		capacity float64,
+		cost float64,
+		now time.Time,
+	) (allowed bool, retryAfterSec int, err error)
 }

@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
 	"encoding/json"
 )
 
@@ -34,16 +34,16 @@ type DeleteSavedIn struct {
 }
 
 type savedUsecase struct {
-	saveds   repository.SavedRepository
-	sessions repository.SessionRepository
-	audits   repository.AuditRepository
+	saveds   port.SavedRepository
+	sessions port.SessionRepository
+	audits   port.AuditRepository
 	val      SavedVal
 }
 
 func NewSavedUsecase(
-	saveds repository.SavedRepository,
-	sessions repository.SessionRepository,
-	audits repository.AuditRepository,
+	saveds port.SavedRepository,
+	sessions port.SessionRepository,
+	audits port.AuditRepository,
 	val SavedVal,
 ) SavedUC {
 	return &savedUsecase{
@@ -57,7 +57,7 @@ func NewSavedUsecase(
 // suggestionを保存・認証ユーザーのみ。
 func (u *savedUsecase) Save(in SaveSuggestionIn) (entity.SavedSuggestion, error) {
 	if in.Actor.UserID == 0 {
-		return entity.SavedSuggestion{}, repository.ErrUnauthorized
+		return entity.SavedSuggestion{}, ErrUnauthorized
 	}
 
 	if err := u.val.Save(in); err != nil {
@@ -70,10 +70,10 @@ func (u *savedUsecase) Save(in SaveSuggestionIn) (entity.SavedSuggestion, error)
 	}
 	// 保存対象 session は認証ユーザー本人のものだけ許可する。
 	if session.UserID == nil {
-		return entity.SavedSuggestion{}, repository.ErrForbidden
+		return entity.SavedSuggestion{}, ErrForbidden
 	}
 	if *session.UserID != in.Actor.UserID {
-		return entity.SavedSuggestion{}, repository.ErrForbidden
+		return entity.SavedSuggestion{}, ErrForbidden
 	}
 
 	suggestion, err := u.sessions.GetSuggestionByID(in.SuggestionID)
@@ -83,7 +83,7 @@ func (u *savedUsecase) Save(in SaveSuggestionIn) (entity.SavedSuggestion, error)
 
 	// suggestionは指定sessionに属している必要がある。
 	if suggestion.SessionID != in.SessionID {
-		return entity.SavedSuggestion{}, repository.ErrConflict
+		return entity.SavedSuggestion{}, ErrConflict
 	}
 
 	saved := &entity.SavedSuggestion{
@@ -112,14 +112,14 @@ func (u *savedUsecase) Save(in SaveSuggestionIn) (entity.SavedSuggestion, error)
 // 認証ユーザーの保存済み提案一覧を返す。
 func (u *savedUsecase) List(in ListSavedIn) ([]entity.SavedSuggestion, error) {
 	if in.Actor.UserID == 0 {
-		return nil, repository.ErrUnauthorized
+		return nil, ErrUnauthorized
 	}
 
 	if err := u.val.List(in); err != nil {
 		return nil, err
 	}
 
-	out, err := u.saveds.List(repository.SavedListQ{
+	out, err := u.saveds.List(port.SavedListQ{
 		UserID: in.Actor.UserID,
 		Limit:  in.Limit,
 		Offset: in.Offset,
@@ -135,7 +135,7 @@ func (u *savedUsecase) List(in ListSavedIn) ([]entity.SavedSuggestion, error) {
 // suggestion_idをキーにしつつ、user_id条件で本人データだけ削除する。
 func (u *savedUsecase) Delete(in DeleteSavedIn) error {
 	if in.Actor.UserID == 0 {
-		return repository.ErrUnauthorized
+		return ErrUnauthorized
 	}
 
 	if err := u.val.Delete(in); err != nil {

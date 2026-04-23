@@ -12,9 +12,11 @@ import (
 	"coffee-spa/controller"
 	"coffee-spa/db"
 	"coffee-spa/gemini"
+	"coffee-spa/middleware"
 	"coffee-spa/repository"
 	"coffee-spa/router"
 	"coffee-spa/usecase"
+	"coffee-spa/usecase/port"
 	"coffee-spa/validator"
 
 	"github.com/labstack/echo/v4"
@@ -78,10 +80,7 @@ func main() {
 	svcs := newAppServices(c)
 
 	// usecaseを生成。
-	ucs, err := newUsecases(d.S, repos, vals, svcs)
-	if err != nil {
-		log.Fatal(err)
-	}
+	ucs := newUsecases(d.S, repos, vals, svcs)
 
 	// controllerを生成。
 	ctls := newControllers(ucs)
@@ -110,18 +109,18 @@ func main() {
 
 // main内で生成したrepositoryをまとめる。
 type appRepositories struct {
-	userRepo    repository.UserRepository
-	evRepo      repository.EmailVerifyRepository
-	pwRepo      repository.PwResetRepository
-	rtRepo      repository.RtRepository
-	sourceRepo  repository.SourceRepository
-	itemRepo    repository.ItemRepository
-	auditRepo   repository.AuditRepository
-	sessionRepo repository.SessionRepository
-	beanRepo    repository.BeanRepository
-	recipeRepo  repository.RecipeRepository
-	savedRepo   repository.SavedRepository
-	rlStore     usecase.RateLimitStore
+	userRepo    port.UserRepository
+	evRepo      port.EmailVerifyRepository
+	pwRepo      port.PwResetRepository
+	rtRepo      port.RtRepository
+	sourceRepo  port.SourceRepository
+	itemRepo    port.ItemRepository
+	auditRepo   port.AuditRepository
+	sessionRepo port.SessionRepository
+	beanRepo    port.BeanRepository
+	recipeRepo  port.RecipeRepository
+	savedRepo   port.SavedRepository
+	rlStore     port.RateLimitStore
 }
 
 // DB / Redisからrepositoryをまとめて生成。
@@ -213,12 +212,7 @@ type appUsecases struct {
 	auditUC      usecase.AuditUC
 
 	rlUC      usecase.RateLimiter
-	wsLimiter middlewareWsLimiter
-}
-
-// router / middlewareへ渡すWSinterface。
-type middlewareWsLimiter interface {
-	AllowWS(key string) (bool, int, error)
+	wsLimiter middleware.WsRateLimiter
 }
 
 // repository / validator / service からusecase。
@@ -227,7 +221,7 @@ func newUsecases(
 	repos appRepositories,
 	vals appValidators,
 	svcs appServices,
-) (appUsecases, error) {
+) appUsecases {
 	// 認証前後API用のrate limitルールを定義。
 	signupIPRule := usecase.RateRule{
 		Rate:     0.1,
@@ -375,7 +369,7 @@ func newUsecases(
 		wsLimiter: rlUC,
 	}
 
-	return out, nil
+	return out
 }
 
 // controller。

@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
 )
 
 // 監査一覧取得。
@@ -19,12 +19,12 @@ type AuditListIn struct {
 }
 
 type auditUsecase struct {
-	audits repository.AuditRepository
+	audits port.AuditRepository
 	val    AuditVal
 }
 
 func NewAuditUsecase(
-	audits repository.AuditRepository,
+	audits port.AuditRepository,
 	val AuditVal,
 ) AuditUC {
 	return &auditUsecase{
@@ -36,14 +36,14 @@ func NewAuditUsecase(
 // 監査一覧はadminのみ許可する。
 func (u *auditUsecase) List(actor entity.Actor, in AuditListIn) ([]entity.AuditLog, error) {
 	if actor.Role != entity.RoleAdmin {
-		return nil, repository.ErrForbidden
+		return nil, ErrForbidden
 	}
 
 	if err := u.val.List(in); err != nil {
 		return nil, err
 	}
 
-	out, err := u.audits.List(repository.AuditListQ{
+	out, err := u.audits.List(port.AuditListQ{
 		Type:   in.Type,
 		UserID: in.UserID,
 		Limit:  in.Limit,

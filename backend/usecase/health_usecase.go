@@ -1,7 +1,6 @@
 package usecase
 
 import (
-	"coffee-spa/repository"
 	"context"
 	"database/sql"
 	"time"
@@ -23,7 +22,7 @@ func (u *HealthUC) Check() error {
 	defer cancel()
 
 	if err := u.db.PingContext(ctx); err != nil {
-		return repository.ErrInternal
+		return ErrInternal
 	}
 
 	return nil

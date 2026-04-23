@@ -1,10 +1,9 @@
 package usecase
 
 import (
-	"encoding/json"
-
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
+	"encoding/json"
 )
 
 // Sourceの作成・取得・一覧。
@@ -21,14 +20,14 @@ type CreateSourceIn struct {
 }
 
 type sourceUsecase struct {
-	sources repository.SourceRepository
-	audits  repository.AuditRepository
+	sources port.SourceRepository
+	audits  port.AuditRepository
 	val     SourceVal
 }
 
 func NewSourceUsecase(
-	sources repository.SourceRepository,
-	audits repository.AuditRepository,
+	sources port.SourceRepository,
+	audits port.AuditRepository,
 	val SourceVal,
 ) SourceUC {
 	return &sourceUsecase{
@@ -42,7 +41,7 @@ func NewSourceUsecase(
 // 管理操作。adminのみ許可する。
 func (u *sourceUsecase) Create(actor entity.Actor, in CreateSourceIn) (entity.Source, error) {
 	if actor.Role != entity.RoleAdmin {
-		return entity.Source{}, repository.ErrForbidden
+		return entity.Source{}, ErrForbidden
 	}
 
 	if err := u.val.Create(in); err != nil {
@@ -90,7 +89,7 @@ func (u *sourceUsecase) List(limit int, offset int) ([]entity.Source, error) {
 		return nil, err
 	}
 
-	out, err := u.sources.List(repository.SourceListQ{
+	out, err := u.sources.List(port.SourceListQ{
 		Limit:  limit,
 		Offset: offset,
 	})

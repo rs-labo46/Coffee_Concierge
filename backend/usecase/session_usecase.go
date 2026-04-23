@@ -1,10 +1,9 @@
 package usecase
 
 import (
-	"encoding/json"
-
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
+	"encoding/json"
 )
 
 // セッション詳細取得、履歴一覧取得、セッション終了を担当する。
@@ -47,15 +46,15 @@ type CloseSessionIn struct {
 }
 
 type sessionUsecase struct {
-	sessions repository.SessionRepository
-	audits   repository.AuditRepository
+	sessions port.SessionRepository
+	audits   port.AuditRepository
 	val      SearchVal
 	clock    Clock
 }
 
 func NewSessionUsecase(
-	sessions repository.SessionRepository,
-	audits repository.AuditRepository,
+	sessions port.SessionRepository,
+	audits port.AuditRepository,
 	val SearchVal,
 	clock Clock,
 ) SessionUC {
@@ -106,14 +105,14 @@ func (u *sessionUsecase) GetSession(in GetSessionIn) (GetSessionOut, error) {
 // guestは履歴一覧を使えない。
 func (u *sessionUsecase) ListHistory(in ListHistoryIn) ([]entity.Session, error) {
 	if in.Actor.UserID == 0 {
-		return nil, repository.ErrUnauthorized
+		return nil, ErrUnauthorized
 	}
 
 	if err := u.val.ListHistory(in); err != nil {
 		return nil, err
 	}
 
-	out, err := u.sessions.ListHistory(repository.HistoryQ{
+	out, err := u.sessions.ListHistory(port.HistoryQ{
 		UserID: in.Actor.UserID,
 		Limit:  in.Limit,
 		Offset: in.Offset,
@@ -138,7 +137,7 @@ func (u *sessionUsecase) CloseSession(in CloseSessionIn) error {
 	}
 
 	if session.Status != entity.SessionActive {
-		return repository.ErrConflict
+		return ErrConflict
 	}
 
 	if err := u.sessions.CloseSession(session.ID); err != nil {
@@ -170,16 +169,16 @@ func (u *sessionUsecase) resolveReadableSession(
 			return nil, err
 		}
 		if session.UserID == nil {
-			return nil, repository.ErrForbidden
+			return nil, ErrForbidden
 		}
 		if *session.UserID != actor.UserID {
-			return nil, repository.ErrForbidden
+			return nil, ErrForbidden
 		}
 		return session, nil
 	}
 
 	if sessionKey == "" {
-		return nil, repository.ErrUnauthorized
+		return nil, ErrUnauthorized
 	}
 
 	return u.sessions.GetGuestSessionByID(
@@ -202,16 +201,16 @@ func (u *sessionUsecase) resolveWritableSession(
 			return nil, err
 		}
 		if session.UserID == nil {
-			return nil, repository.ErrForbidden
+			return nil, ErrForbidden
 		}
 		if *session.UserID != actor.UserID {
-			return nil, repository.ErrForbidden
+			return nil, ErrForbidden
 		}
 		return session, nil
 	}
 
 	if sessionKey == "" {
-		return nil, repository.ErrUnauthorized
+		return nil, ErrUnauthorized
 	}
 
 	return u.sessions.GetGuestSessionByID(

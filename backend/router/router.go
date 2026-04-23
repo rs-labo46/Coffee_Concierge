@@ -3,7 +3,6 @@ package router
 import (
 	"coffee-spa/controller"
 	"coffee-spa/middleware"
-	"coffee-spa/repository"
 
 	"github.com/labstack/echo/v4"
 )
@@ -22,7 +21,7 @@ func New(
 	auditCtl *controller.AuditCtl,
 	wsCtl *controller.WsCtl,
 	jwtSecret string,
-	userRepo repository.UserRepository,
+	userRepo middleware.TokenVersionReader,
 	feURL string,
 	wsLimiter middleware.WsRateLimiter,
 ) {

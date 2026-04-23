@@ -1,34 +1,108 @@
 package repository
 
 import (
-	"coffee-spa/entity"
 	"errors"
 	"strings"
 	"time"
 
+	"coffee-spa/apperr"
+	"coffee-spa/entity"
+	"coffee-spa/usecase/port"
+
 	"gorm.io/gorm"
 )
 
+type sourceRepository struct {
+	db *gorm.DB
+}
 type itemRepository struct {
 	db *gorm.DB
 }
 
-func NewItemRepository(db *gorm.DB) ItemRepository {
+func NewSourceRepository(db *gorm.DB) port.SourceRepository {
+	return &sourceRepository{db: db}
+}
+
+// sourcesに1件保存する。
+func (r *sourceRepository) Create(src *entity.Source) error {
+	if src == nil {
+		return apperr.ErrInvalidState
+	}
+
+	// INSERTを実行する。
+	err := r.db.Create(src).Error
+	if err != nil {
+		if isDup(err) {
+			return apperr.ErrConflict
+		}
+		return apperr.ErrInternal
+	}
+
+	return nil
+}
+
+// sourcesを1件取得する。
+func (r *sourceRepository) GetByID(id uint) (*entity.Source, error) {
+	// 0は不正ID。
+	if id == 0 {
+		return nil, apperr.ErrNotFound
+	}
+	var src entity.Source
+
+	// 主キー検索を行う。
+	err := r.db.First(&src, id).Error
+	if err != nil {
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.ErrNotFound
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	return &src, nil
+}
+
+// sourcesの一覧を返す。
+func (r *sourceRepository) List(q port.SourceListQ) ([]entity.Source, error) {
+
+	var sources []entity.Source
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	offset := q.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	// 一覧取得を行う。
+	err := r.db.Model(&entity.Source{}).Order("id ASC").Limit(limit).Offset(offset).Find(&sources).Error
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	return sources, nil
+}
+
+func NewItemRepository(db *gorm.DB) port.ItemRepository {
 	return &itemRepository{db}
 }
 
 func (r *itemRepository) Create(item *entity.Item) error {
 	if item == nil {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// INSERTを実行する。
 	err := r.db.Create(item).Error
 	if err != nil {
 		if isDup(err) || isFK(err) {
-			return ErrConflict
+			return apperr.ErrConflict
 		}
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 
 	return nil
@@ -37,23 +111,23 @@ func (r *itemRepository) Create(item *entity.Item) error {
 // 公開/非公開を問わずIDで1件取得
 func (r *itemRepository) GetByID(id uint) (*entity.Item, error) {
 	if id == 0 {
-		return nil, ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
 	var item entity.Item
 
 	err := r.db.Preload("Source").First(&item, id).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return nil, apperr.ErrNotFound
 
 		}
 
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 	return &item, nil
 }
 
-func (r *itemRepository) List(q ItemListQ) ([]entity.Item, error) {
+func (r *itemRepository) List(q port.ItemListQ) ([]entity.Item, error) {
 	var items []entity.Item
 
 	//公開中のアイテムクエリ
@@ -93,7 +167,7 @@ func (r *itemRepository) List(q ItemListQ) ([]entity.Item, error) {
 		Find(&items).
 		Error
 	if err != nil {
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return items, nil
@@ -139,7 +213,7 @@ func (r *itemRepository) Top(limit int) (*entity.TopItems, error) {
 			Find(q.dst).
 			Error
 		if err != nil {
-			return nil, ErrInternal
+			return nil, apperr.ErrInternal
 		}
 	}
 
@@ -220,7 +294,7 @@ func (r *itemRepository) SearchRelated(
 		Find(&items).
 		Error
 	if err != nil {
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return items, nil

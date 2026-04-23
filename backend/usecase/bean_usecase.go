@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/repository"
+	"coffee-spa/usecase/port"
 	"encoding/json"
 	"strconv"
 )
@@ -56,14 +56,14 @@ type UpdateBeanIn struct {
 }
 
 type beanUsecase struct {
-	beans  repository.BeanRepository
-	audits repository.AuditRepository
+	beans  port.BeanRepository
+	audits port.AuditRepository
 	val    BeanVal
 }
 
 func NewBeanUsecase(
-	beans repository.BeanRepository,
-	audits repository.AuditRepository,
+	beans port.BeanRepository,
+	audits port.AuditRepository,
 	val BeanVal,
 ) BeanUC {
 	return &beanUsecase{
@@ -77,7 +77,7 @@ func NewBeanUsecase(
 // adminのみ許可する。
 func (u *beanUsecase) Create(actor entity.Actor, in CreateBeanIn) (entity.Bean, error) {
 	if actor.Role != entity.RoleAdmin {
-		return entity.Bean{}, repository.ErrForbidden
+		return entity.Bean{}, ErrForbidden
 	}
 
 	if err := u.val.Create(in); err != nil {
@@ -120,7 +120,7 @@ func (u *beanUsecase) Create(actor entity.Actor, in CreateBeanIn) (entity.Bean, 
 // adminのみ許可する。
 func (u *beanUsecase) Update(actor entity.Actor, in UpdateBeanIn) (entity.Bean, error) {
 	if actor.Role != entity.RoleAdmin {
-		return entity.Bean{}, repository.ErrForbidden
+		return entity.Bean{}, ErrForbidden
 	}
 
 	if err := u.val.Update(in); err != nil {
@@ -182,7 +182,7 @@ func (u *beanUsecase) List(in BeanListIn) ([]entity.Bean, error) {
 		return nil, err
 	}
 
-	out, err := u.beans.List(repository.BeanListQ{
+	out, err := u.beans.List(port.BeanListQ{
 		Q:      in.Q,
 		Roast:  in.Roast,
 		Active: in.Active,

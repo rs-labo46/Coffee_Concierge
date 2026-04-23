@@ -3,7 +3,9 @@ package repository
 import (
 	"errors"
 
+	"coffee-spa/apperr"
 	"coffee-spa/entity"
+	"coffee-spa/usecase/port"
 
 	"gorm.io/gorm"
 )
@@ -13,7 +15,7 @@ type savedRepository struct {
 	db *gorm.DB
 }
 
-func NewSavedRepository(db *gorm.DB) SavedRepository {
+func NewSavedRepository(db *gorm.DB) port.SavedRepository {
 	return &savedRepository{
 		db: db,
 	}
@@ -22,7 +24,7 @@ func NewSavedRepository(db *gorm.DB) SavedRepository {
 // saved suggestionを新規作成。
 func (r *savedRepository) Create(saved *entity.SavedSuggestion) error {
 	if saved == nil {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// レコードをINSERT 。
@@ -30,18 +32,18 @@ func (r *savedRepository) Create(saved *entity.SavedSuggestion) error {
 	if err != nil {
 		// 二重保存やFKの不整合はconflict。
 		if isDup(err) || isFK(err) {
-			return ErrConflict
+			return apperr.ErrConflict
 		}
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 
 	return nil
 }
 
 // ユーザーの保存済み提案一覧を返す。
-func (r *savedRepository) List(q SavedListQ) ([]entity.SavedSuggestion, error) {
+func (r *savedRepository) List(q port.SavedListQ) ([]entity.SavedSuggestion, error) {
 	if q.UserID == 0 {
-		return nil, ErrUnauthorized
+		return nil, apperr.ErrUnauthorized
 	}
 
 	// limitは未指定なら20、上限は100に。
@@ -77,7 +79,7 @@ func (r *savedRepository) List(q SavedListQ) ([]entity.SavedSuggestion, error) {
 		Find(&saveds).
 		Error
 	if err != nil {
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return saveds, nil
@@ -87,7 +89,7 @@ func (r *savedRepository) List(q SavedListQ) ([]entity.SavedSuggestion, error) {
 // 本人の保存データだけを削除するためのメソッドです。
 func (r *savedRepository) DeleteByUserAndSuggestionID(userID uint, suggestionID uint) error {
 	if userID == 0 || suggestionID == 0 {
-		return ErrInvalidState
+		return apperr.ErrInvalidState
 	}
 
 	// 本人の保存データだけを対象に削除。
@@ -96,10 +98,10 @@ func (r *savedRepository) DeleteByUserAndSuggestionID(userID uint, suggestionID 
 		Where("suggestion_id = ?", suggestionID).
 		Delete(&entity.SavedSuggestion{})
 	if res.Error != nil {
-		return ErrInternal
+		return apperr.ErrInternal
 	}
 	if res.RowsAffected == 0 {
-		return ErrNotFound
+		return apperr.ErrNotFound
 	}
 
 	return nil
@@ -111,7 +113,7 @@ func (r *savedRepository) GetByUserAndSuggestionID(
 	suggestionID uint,
 ) (*entity.SavedSuggestion, error) {
 	if userID == 0 || suggestionID == 0 {
-		return nil, ErrNotFound
+		return nil, apperr.ErrNotFound
 	}
 
 	var saved entity.SavedSuggestion
@@ -129,9 +131,9 @@ func (r *savedRepository) GetByUserAndSuggestionID(
 		Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return nil, apperr.ErrNotFound
 		}
-		return nil, ErrInternal
+		return nil, apperr.ErrInternal
 	}
 
 	return &saved, nil
