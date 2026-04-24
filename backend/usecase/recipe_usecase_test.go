@@ -27,7 +27,9 @@ func TestRecipeUsecase_Update(t *testing.T) {
 		recipeRepoMock{
 			getByIDFn: func(id uint) (*entity.Recipe, error) { return &entity.Recipe{ID: id, Name: "old"}, nil },
 			updateFn: func(recipe *entity.Recipe) error {
-				if recipe.Name != "new" { t.Fatalf("unexpected recipe:%+v", recipe) }
+				if recipe.Name != "new" {
+					t.Fatalf("unexpected recipe:%+v", recipe)
+				}
 				return nil
 			},
 		},
@@ -36,6 +38,10 @@ func TestRecipeUsecase_Update(t *testing.T) {
 		recipeValMock{},
 	)
 	out, err := uc.Update(entity.Actor{UserID: 1, Role: entity.RoleAdmin}, UpdateRecipeIn{ID: 1, BeanID: 2, Name: "new", Method: entity.MethodMilk, TempPref: entity.TempHot, Grind: "g", Ratio: "1", Temp: 80, TimeSec: 60, Steps: []string{"b"}, Desc: "d", Active: false})
-	if err != nil { t.Fatalf("unexpected error:%v", err) }
-	if out.Name != "new" { t.Fatalf("unexpected output:%+v", out) }
+	if err != nil {
+		t.Fatalf("unexpected error:%v", err)
+	}
+	if out.Name != "new" {
+		t.Fatalf("unexpected output:%+v", out)
+	}
 }

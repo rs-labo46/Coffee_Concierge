@@ -1,17 +1,46 @@
 package repository
 
 import (
+	"coffee-spa/apperr"
+	"coffee-spa/entity"
+
 	"errors"
 	"strings"
 	"time"
 
-	"coffee-spa/apperr"
-	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
-
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
+
+type UserRepository interface {
+	Create(user *entity.User) error
+	GetByID(id uint) (*entity.User, error)
+	GetByEmail(email string) (*entity.User, error)
+	Update(user *entity.User) error
+	UpdateTokenVer(userID uint, tokenVer int) error
+}
+
+type EmailVerifyRepository interface {
+	Create(v *entity.EmailVerify) error
+	GetByTokenHash(tokenHash string) (*entity.EmailVerify, error)
+	MarkUsed(id uint, usedAt time.Time) error
+	DeleteExpired(now time.Time) error
+}
+
+type PwResetRepository interface {
+	Create(r *entity.PwReset) error
+	GetByTokenHash(tokenHash string) (*entity.PwReset, error)
+	MarkUsed(id uint, usedAt time.Time) error
+	DeleteExpired(now time.Time) error
+}
+
+type RtRepository interface {
+	Create(rt *entity.Rt) error
+	GetByTokenHash(tokenHash string) (*entity.Rt, error)
+	Update(rt *entity.Rt) error
+	RevokeFamily(familyID string, revokedAt time.Time) error
+	DeleteExpired(now time.Time) error
+}
 
 type userRepository struct {
 	db *gorm.DB
@@ -26,6 +55,30 @@ type evRepository struct {
 // パスワード再設定tokenの発行・取得・使用済み
 type pwRepository struct {
 	db *gorm.DB
+}
+
+func NewUserRepository(db *gorm.DB) UserRepository {
+	return &userRepository{
+		db: db,
+	}
+}
+
+func NewEmailVerifyRepository(db *gorm.DB) EmailVerifyRepository {
+	return &evRepository{
+		db: db,
+	}
+}
+
+func NewPwResetRepository(db *gorm.DB) PwResetRepository {
+	return &pwRepository{
+		db: db,
+	}
+}
+
+func NewRtRepository(db *gorm.DB) RtRepository {
+	return &rtRepository{
+		db: db,
+	}
 }
 
 func isDup(err error) bool {
@@ -46,10 +99,6 @@ func isFK(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "foreign key") ||
 		strings.Contains(msg, "violates foreign key constraint")
-}
-
-func NewUserRepository(db *gorm.DB) port.UserRepository {
-	return &userRepository{db}
 }
 
 // usersに新規ユーザーを保存する。
@@ -159,14 +208,6 @@ func (r *userRepository) UpdateTokenVer(userID uint, tokenVer int) error {
 	}
 
 	return nil
-}
-
-func NewEvRepository(db *gorm.DB) port.EmailVerifyRepository {
-	return &evRepository{db}
-}
-
-func NewPwRepository(db *gorm.DB) port.PwResetRepository {
-	return &pwRepository{db: db}
 }
 
 // email_verifiesに1件保存する。
@@ -346,10 +387,6 @@ func (r *pwRepository) DeleteExpired(now time.Time) error {
 	}
 
 	return nil
-}
-
-func NewRtRepository(db *gorm.DB) port.RtRepository {
-	return &rtRepository{db}
 }
 
 // refresh_tokensに1件保存する。

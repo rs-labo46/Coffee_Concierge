@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 )
 
 // 対話検索フロー(session開始、初期条件設定、発話追加、条件差分更新、再検索)
@@ -138,11 +138,11 @@ type Ranker interface {
 
 // searchFlowUsecase は SearchFlowUC の実装。
 type searchFlowUsecase struct {
-	sessions port.SessionRepository
-	beans    port.BeanRepository
-	recipes  port.RecipeRepository
-	items    port.ItemRepository
-	audits   port.AuditRepository
+	sessions repository.SessionRepository
+	beans    repository.BeanRepository
+	recipes  repository.RecipeRepository
+	items    repository.ItemRepository
+	audits   repository.AuditRepository
 	// 入力検証はusecase側。
 	val SearchVal
 	// 候補のランキング。
@@ -156,11 +156,11 @@ type searchFlowUsecase struct {
 }
 
 func NewSearchFlowUsecase(
-	sessions port.SessionRepository,
-	beans port.BeanRepository,
-	recipes port.RecipeRepository,
-	items port.ItemRepository,
-	audits port.AuditRepository,
+	sessions repository.SessionRepository,
+	beans repository.BeanRepository,
+	recipes repository.RecipeRepository,
+	items repository.ItemRepository,
+	audits repository.AuditRepository,
 	val SearchVal,
 	ranker Ranker,
 	gemini GeminiClient,

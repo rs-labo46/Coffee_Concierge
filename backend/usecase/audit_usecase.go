@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 )
 
 // 監査一覧取得。
@@ -19,12 +19,12 @@ type AuditListIn struct {
 }
 
 type auditUsecase struct {
-	audits port.AuditRepository
+	audits repository.AuditRepository
 	val    AuditVal
 }
 
 func NewAuditUsecase(
-	audits port.AuditRepository,
+	audits repository.AuditRepository,
 	val AuditVal,
 ) AuditUC {
 	return &auditUsecase{
@@ -43,7 +43,7 @@ func (u *auditUsecase) List(actor entity.Actor, in AuditListIn) ([]entity.AuditL
 		return nil, err
 	}
 
-	out, err := u.audits.List(port.AuditListQ{
+	out, err := u.audits.List(repository.AuditListQ{
 		Type:   in.Type,
 		UserID: in.UserID,
 		Limit:  in.Limit,

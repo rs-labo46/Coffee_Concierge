@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 	"encoding/json"
 	"strconv"
 )
@@ -56,14 +56,14 @@ type UpdateBeanIn struct {
 }
 
 type beanUsecase struct {
-	beans  port.BeanRepository
-	audits port.AuditRepository
+	beans  repository.BeanRepository
+	audits repository.AuditRepository
 	val    BeanVal
 }
 
 func NewBeanUsecase(
-	beans port.BeanRepository,
-	audits port.AuditRepository,
+	beans repository.BeanRepository,
+	audits repository.AuditRepository,
 	val BeanVal,
 ) BeanUC {
 	return &beanUsecase{
@@ -182,7 +182,7 @@ func (u *beanUsecase) List(in BeanListIn) ([]entity.Bean, error) {
 		return nil, err
 	}
 
-	out, err := u.beans.List(port.BeanListQ{
+	out, err := u.beans.List(repository.BeanListQ{
 		Q:      in.Q,
 		Roast:  in.Roast,
 		Active: in.Active,

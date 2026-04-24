@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 )
 
 type AuthUC interface {
@@ -118,11 +118,11 @@ type Mailer interface {
 }
 
 type authUsecase struct {
-	users    port.UserRepository
-	verifies port.EmailVerifyRepository
-	resets   port.PwResetRepository
-	rts      port.RtRepository
-	audits   port.AuditRepository
+	users    repository.UserRepository
+	verifies repository.EmailVerifyRepository
+	resets   repository.PwResetRepository
+	rts      repository.RtRepository
+	audits   repository.AuditRepository
 
 	val      AuthVal
 	hasher   PwHasher
@@ -138,11 +138,11 @@ type authUsecase struct {
 }
 
 func NewAuthUsecase(
-	users port.UserRepository,
-	verifies port.EmailVerifyRepository,
-	resets port.PwResetRepository,
-	rts port.RtRepository,
-	audits port.AuditRepository,
+	users repository.UserRepository,
+	verifies repository.EmailVerifyRepository,
+	resets repository.PwResetRepository,
+	rts repository.RtRepository,
+	audits repository.AuditRepository,
 	val AuthVal,
 	hasher PwHasher,
 	tokenSvc TokenSvc,

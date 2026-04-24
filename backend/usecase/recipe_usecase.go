@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 	"encoding/json"
 )
 
@@ -53,16 +53,16 @@ type UpdateRecipeIn struct {
 }
 
 type recipeUsecase struct {
-	recipes port.RecipeRepository
-	beans   port.BeanRepository
-	audits  port.AuditRepository
+	recipes repository.RecipeRepository
+	beans   repository.BeanRepository
+	audits  repository.AuditRepository
 	val     RecipeVal
 }
 
 func NewRecipeUsecase(
-	recipes port.RecipeRepository,
-	beans port.BeanRepository,
-	audits port.AuditRepository,
+	recipes repository.RecipeRepository,
+	beans repository.BeanRepository,
+	audits repository.AuditRepository,
 	val RecipeVal,
 ) RecipeUC {
 	return &recipeUsecase{
@@ -190,7 +190,7 @@ func (u *recipeUsecase) List(in RecipeListIn) ([]entity.Recipe, error) {
 		return nil, err
 	}
 
-	out, err := u.recipes.List(port.RecipeListQ{
+	out, err := u.recipes.List(repository.RecipeListQ{
 		BeanID:   in.BeanID,
 		Method:   in.Method,
 		TempPref: in.TempPref,

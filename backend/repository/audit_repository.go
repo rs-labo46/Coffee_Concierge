@@ -3,16 +3,26 @@ package repository
 import (
 	"coffee-spa/apperr"
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
 
 	"gorm.io/gorm"
 )
 
+type AuditRepository interface {
+	Create(log *entity.AuditLog) error
+	List(q AuditListQ) ([]entity.AuditLog, error)
+}
+
+type AuditListQ struct {
+	Type   string
+	UserID *uint
+	Limit  int
+	Offset int
+}
 type auditRepository struct {
 	db *gorm.DB
 }
 
-func NewAuditRepository(db *gorm.DB) port.AuditRepository {
+func NewAuditRepository(db *gorm.DB) AuditRepository {
 	return &auditRepository{db: db}
 }
 
@@ -22,7 +32,6 @@ func (r *auditRepository) Create(log *entity.AuditLog) error {
 		return apperr.ErrInvalidState
 	}
 
-	// INSERTを実行する。
 	err := r.db.Create(log).Error
 	if err != nil {
 		if isFK(err) {
@@ -35,19 +44,15 @@ func (r *auditRepository) Create(log *entity.AuditLog) error {
 }
 
 // 監査ログ一覧
-func (r *auditRepository) List(q port.AuditListQ) ([]entity.AuditLog, error) {
+func (r *auditRepository) List(q AuditListQ) ([]entity.AuditLog, error) {
 	var logs []entity.AuditLog
 
-	// ベースクエリを作る。
-	tx := r.db.
-		Model(&entity.AuditLog{})
+	tx := r.db.Model(&entity.AuditLog{})
 
-	// type指定がある場合は絞り込む。
 	if q.Type != "" {
 		tx = tx.Where("type = ?", q.Type)
 	}
 
-	// user_id 指定がある場合は絞り込む。
 	if q.UserID != nil {
 		tx = tx.Where("user_id = ?", *q.UserID)
 	}
@@ -59,12 +64,12 @@ func (r *auditRepository) List(q port.AuditListQ) ([]entity.AuditLog, error) {
 	if limit > 200 {
 		limit = 200
 	}
+
 	offset := q.Offset
 	if offset < 0 {
 		offset = 0
 	}
 
-	// 一覧取得を行う。
 	err := tx.
 		Order("created_at DESC").
 		Limit(limit).

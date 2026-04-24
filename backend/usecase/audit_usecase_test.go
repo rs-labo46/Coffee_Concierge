@@ -4,12 +4,12 @@ import (
 	"testing"
 
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 )
 
 func TestAuditUsecase_List(t *testing.T) {
 	t.Run("adminのみ成功", func(t *testing.T) {
-		repo := &auditRepoMock{listFn: func(q port.AuditListQ) ([]entity.AuditLog, error) {
+		repo := &auditRepoMock{listFn: func(q repository.AuditListQ) ([]entity.AuditLog, error) {
 			if q.Type != "auth.login" || q.Limit != 10 || q.Offset != 5 {
 				t.Fatalf("unexpected query:%+v", q)
 			}

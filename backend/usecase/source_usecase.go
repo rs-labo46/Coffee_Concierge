@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 	"encoding/json"
 )
 
@@ -20,14 +20,14 @@ type CreateSourceIn struct {
 }
 
 type sourceUsecase struct {
-	sources port.SourceRepository
-	audits  port.AuditRepository
+	sources repository.SourceRepository
+	audits  repository.AuditRepository
 	val     SourceVal
 }
 
 func NewSourceUsecase(
-	sources port.SourceRepository,
-	audits port.AuditRepository,
+	sources repository.SourceRepository,
+	audits repository.AuditRepository,
 	val SourceVal,
 ) SourceUC {
 	return &sourceUsecase{
@@ -89,7 +89,7 @@ func (u *sourceUsecase) List(limit int, offset int) ([]entity.Source, error) {
 		return nil, err
 	}
 
-	out, err := u.sources.List(port.SourceListQ{
+	out, err := u.sources.List(repository.SourceListQ{
 		Limit:  limit,
 		Offset: offset,
 	})

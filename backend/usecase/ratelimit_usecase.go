@@ -1,7 +1,7 @@
 package usecase
 
 import (
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 	"fmt"
 )
 
@@ -10,6 +10,18 @@ type RateRule struct {
 	Rate     float64
 	Capacity float64
 	Cost     float64
+}
+
+type RateLimitPolicy struct {
+	SignupIP     RateRule
+	LoginIP      RateRule
+	LoginMail    RateRule
+	RefreshToken RateRule
+	ResendIP     RateRule
+	ResendMail   RateRule
+	ForgotIP     RateRule
+	ForgotMail   RateRule
+	WSConnect    RateRule
 }
 
 // controllerやmiddlewareから見たusecaseの入口でどの種類の制限かを表す。
@@ -26,60 +38,87 @@ type RateLimiter interface {
 }
 
 type RateLimitUC struct {
-	// usecaseは実装詳細を持たず、Allowだけ呼ぶ。
-	store port.RateLimitStore
-	//現在時刻
-	clock Clock
-	// signupをIPで制限するためのルール。
-	signupIP RateRule
-	// loginをemailで制限するためのルール。
-	loginIP   RateRule
-	loginMail RateRule
-	// refreshをrefreshtokenのhashで制限するためのルール。
+	store        repository.RateLimitRepository
+	clock        Clock
+	signupIP     RateRule
+	loginIP      RateRule
+	loginMail    RateRule
 	refreshToken RateRule
-
-	// verify再送をIPで制限するためのルール。
-	resendIP RateRule
-
-	// verify再送をemailで制限するためのルール。
-	resendMail RateRule
-
-	// forgot passwordをIPで制限するためのルール。
-	forgotIP RateRule
-
-	// forgot passwordをemailで制限するためのルール。
-	forgotMail RateRule
-
-	// WebSocket接続を制限するためのルール。
-	wsConnect RateRule
+	resendIP     RateRule
+	resendMail   RateRule
+	forgotIP     RateRule
+	forgotMail   RateRule
+	wsConnect    RateRule
 }
 
 // rate limitのusecaseを生成する。
 func NewRateLimitUC(
-	store port.RateLimitStore,
+	store repository.RateLimitRepository,
 	clock Clock,
-	signupIP RateRule,
-	loginIP RateRule,
-	loginMail RateRule,
-	refreshToken RateRule,
-	resendIP RateRule,
-	resendMail RateRule,
-	forgotIP RateRule,
-	forgotMail RateRule,
-	wsConnect RateRule,
+
 ) RateLimiter {
+	policy := DefaultRateLimitPolicy()
 	return &RateLimitUC{
 		store:        store,
 		clock:        clock,
-		signupIP:     signupIP,
-		loginIP:      loginIP,
-		loginMail:    loginMail,
-		refreshToken: refreshToken,
-		resendIP:     resendIP,
-		resendMail:   resendMail,
-		forgotIP:     forgotIP,
-		forgotMail:   forgotMail,
-		wsConnect:    wsConnect,
+		signupIP:     policy.SignupIP,
+		loginIP:      policy.LoginIP,
+		loginMail:    policy.LoginMail,
+		refreshToken: policy.RefreshToken,
+		resendIP:     policy.ResendIP,
+		resendMail:   policy.ResendMail,
+		forgotIP:     policy.ForgotIP,
+		forgotMail:   policy.ForgotMail,
+		wsConnect:    policy.WSConnect,
+	}
+}
+func DefaultRateLimitPolicy() RateLimitPolicy {
+	return RateLimitPolicy{
+		SignupIP: RateRule{
+			Rate:     0.1,
+			Capacity: 3,
+			Cost:     1,
+		},
+		LoginIP: RateRule{
+			Rate:     0.2,
+			Capacity: 10,
+			Cost:     1,
+		},
+		LoginMail: RateRule{
+			Rate:     0.1,
+			Capacity: 5,
+			Cost:     1,
+		},
+		RefreshToken: RateRule{
+			Rate:     0.2,
+			Capacity: 5,
+			Cost:     1,
+		},
+		ResendIP: RateRule{
+			Rate:     0.05,
+			Capacity: 2,
+			Cost:     1,
+		},
+		ResendMail: RateRule{
+			Rate:     0.05,
+			Capacity: 2,
+			Cost:     1,
+		},
+		ForgotIP: RateRule{
+			Rate:     0.05,
+			Capacity: 3,
+			Cost:     1,
+		},
+		ForgotMail: RateRule{
+			Rate:     0.05,
+			Capacity: 3,
+			Cost:     1,
+		},
+		WSConnect: RateRule{
+			Rate:     0.2,
+			Capacity: 5,
+			Cost:     1,
+		},
 	}
 }
 

@@ -1,16 +1,48 @@
 package repository
 
 import (
+	"coffee-spa/apperr"
+	"coffee-spa/entity"
 	"errors"
 	"strings"
 	"time"
 
-	"coffee-spa/apperr"
-	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
-
 	"gorm.io/gorm"
 )
+
+type ItemRepository interface {
+	Create(item *entity.Item) error
+	GetByID(id uint) (*entity.Item, error)
+	List(q ItemListQ) ([]entity.Item, error)
+	Top(limit int) (*entity.TopItems, error)
+	SearchRelated(
+		beanName string,
+		roast entity.Roast,
+		origin string,
+		mood entity.Mood,
+		method entity.Method,
+		limit int,
+		now time.Time,
+	) ([]entity.Item, error)
+}
+
+type SourceRepository interface {
+	Create(src *entity.Source) error
+	GetByID(id uint) (*entity.Source, error)
+	List(q SourceListQ) ([]entity.Source, error)
+}
+
+type SourceListQ struct {
+	Limit  int
+	Offset int
+}
+
+type ItemListQ struct {
+	Q      string
+	Kind   entity.ItemKind
+	Limit  int
+	Offset int
+}
 
 type sourceRepository struct {
 	db *gorm.DB
@@ -19,8 +51,16 @@ type itemRepository struct {
 	db *gorm.DB
 }
 
-func NewSourceRepository(db *gorm.DB) port.SourceRepository {
-	return &sourceRepository{db: db}
+func NewSourceRepository(db *gorm.DB) SourceRepository {
+	return &sourceRepository{
+		db: db,
+	}
+}
+
+func NewItemRepository(db *gorm.DB) ItemRepository {
+	return &itemRepository{
+		db: db,
+	}
 }
 
 // sourcesに1件保存する。
@@ -63,7 +103,7 @@ func (r *sourceRepository) GetByID(id uint) (*entity.Source, error) {
 }
 
 // sourcesの一覧を返す。
-func (r *sourceRepository) List(q port.SourceListQ) ([]entity.Source, error) {
+func (r *sourceRepository) List(q SourceListQ) ([]entity.Source, error) {
 
 	var sources []entity.Source
 	limit := q.Limit
@@ -85,10 +125,6 @@ func (r *sourceRepository) List(q port.SourceListQ) ([]entity.Source, error) {
 	}
 
 	return sources, nil
-}
-
-func NewItemRepository(db *gorm.DB) port.ItemRepository {
-	return &itemRepository{db}
 }
 
 func (r *itemRepository) Create(item *entity.Item) error {
@@ -127,7 +163,7 @@ func (r *itemRepository) GetByID(id uint) (*entity.Item, error) {
 	return &item, nil
 }
 
-func (r *itemRepository) List(q port.ItemListQ) ([]entity.Item, error) {
+func (r *itemRepository) List(q ItemListQ) ([]entity.Item, error) {
 	var items []entity.Item
 
 	//公開中のアイテムクエリ

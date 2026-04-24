@@ -6,17 +6,40 @@ import (
 
 	"coffee-spa/apperr"
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
 
 	"gorm.io/gorm"
 )
 
-// session / turn / pref / suggestionの永続化。
+type SessionRepository interface {
+	CreateSession(session *entity.Session) error
+	GetSessionByID(id uint) (*entity.Session, error)
+	GetGuestSessionByID(id uint, sessionKeyHash string, now time.Time) (*entity.Session, error)
+	ListHistory(q HistoryQ) ([]entity.Session, error)
+	CloseSession(id uint) error
+
+	CreateTurn(turn *entity.Turn) error
+	ListTurns(sessionID uint) ([]entity.Turn, error)
+
+	CreatePref(pref *entity.Pref) error
+	UpdatePref(pref *entity.Pref) error
+	GetPrefBySessionID(sessionID uint) (*entity.Pref, error)
+
+	ReplaceSuggestions(sessionID uint, suggestions []entity.Suggestion) error
+	ListSuggestions(sessionID uint) ([]entity.Suggestion, error)
+	GetSuggestionByID(id uint) (*entity.Suggestion, error)
+}
+
+type HistoryQ struct {
+	UserID uint
+	Limit  int
+	Offset int
+}
+
 type sessionRepository struct {
 	db *gorm.DB
 }
 
-func NewSessionRepository(db *gorm.DB) port.SessionRepository {
+func NewSessionRepository(db *gorm.DB) SessionRepository {
 	return &sessionRepository{
 		db: db,
 	}
@@ -96,7 +119,7 @@ func (r *sessionRepository) GetGuestSessionByID(
 }
 
 // 認証ユーザーの session履歴一覧を返す。
-func (r *sessionRepository) ListHistory(q port.HistoryQ) ([]entity.Session, error) {
+func (r *sessionRepository) ListHistory(q HistoryQ) ([]entity.Session, error) {
 	// userID がなければ認証ユーザーの履歴として扱えません。
 	if q.UserID == 0 {
 		return nil, apperr.ErrUnauthorized

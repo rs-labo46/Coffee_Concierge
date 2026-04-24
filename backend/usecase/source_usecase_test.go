@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 )
 
 func TestSourceUsecase_Create(t *testing.T) {
@@ -37,7 +37,7 @@ func TestSourceUsecase_Create(t *testing.T) {
 }
 
 func TestSourceUsecase_List(t *testing.T) {
-	uc := NewSourceUsecase(sourceRepoMock{listFn: func(q port.SourceListQ) ([]entity.Source, error) {
+	uc := NewSourceUsecase(sourceRepoMock{listFn: func(q repository.SourceListQ) ([]entity.Source, error) {
 		if q.Limit != 3 || q.Offset != 1 {
 			t.Fatalf("unexpected query:%+v", q)
 		}

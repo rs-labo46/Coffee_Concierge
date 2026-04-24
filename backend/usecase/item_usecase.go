@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 )
 
 // Itemの作成・取得・一覧・Topを扱う。
@@ -28,16 +28,16 @@ type CreateItemIn struct {
 }
 
 type itemUsecase struct {
-	items   port.ItemRepository
-	sources port.SourceRepository
-	audits  port.AuditRepository
+	items   repository.ItemRepository
+	sources repository.SourceRepository
+	audits  repository.AuditRepository
 	val     ItemVal
 }
 
 func NewItemUsecase(
-	items port.ItemRepository,
-	sources port.SourceRepository,
-	audits port.AuditRepository,
+	items repository.ItemRepository,
+	sources repository.SourceRepository,
+	audits repository.AuditRepository,
 	val ItemVal,
 ) ItemUC {
 	return &itemUsecase{
@@ -113,7 +113,7 @@ func (u *itemUsecase) List(q entity.ItemQ) ([]entity.Item, error) {
 		return nil, err
 	}
 
-	out, err := u.items.List(port.ItemListQ{
+	out, err := u.items.List(repository.ItemListQ{
 		Q:      q.Q,
 		Kind:   q.Kind,
 		Limit:  q.Limit,

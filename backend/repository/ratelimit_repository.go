@@ -11,8 +11,18 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+type RateLimitRepository interface {
+	Allow(key string, rate float64, capacity float64, cost float64, now time.Time) (allowed bool, retryAfterSec int, err error)
+}
+
 type RateLimitStore struct {
 	rdb *redis.Client
+}
+
+func NewRateLimitRepository(rdb *redis.Client) RateLimitRepository {
+	return &RateLimitStore{
+		rdb: rdb,
+	}
 }
 
 var allowScript = redis.NewScript(`
@@ -79,13 +89,6 @@ end
 
 return {allowed, remaining, retry_after}
 `)
-
-// RateLimitStoreを生成。
-func NewRateLimitStore(rdb *redis.Client) *RateLimitStore {
-	return &RateLimitStore{
-		rdb: rdb,
-	}
-}
 
 // AllowのtokenBucket方式
 func (r *RateLimitStore) Allow(

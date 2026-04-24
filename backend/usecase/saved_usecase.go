@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 	"encoding/json"
 )
 
@@ -34,16 +34,16 @@ type DeleteSavedIn struct {
 }
 
 type savedUsecase struct {
-	saveds   port.SavedRepository
-	sessions port.SessionRepository
-	audits   port.AuditRepository
+	saveds   repository.SavedRepository
+	sessions repository.SessionRepository
+	audits   repository.AuditRepository
 	val      SavedVal
 }
 
 func NewSavedUsecase(
-	saveds port.SavedRepository,
-	sessions port.SessionRepository,
-	audits port.AuditRepository,
+	saveds repository.SavedRepository,
+	sessions repository.SessionRepository,
+	audits repository.AuditRepository,
 	val SavedVal,
 ) SavedUC {
 	return &savedUsecase{
@@ -119,7 +119,7 @@ func (u *savedUsecase) List(in ListSavedIn) ([]entity.SavedSuggestion, error) {
 		return nil, err
 	}
 
-	out, err := u.saveds.List(port.SavedListQ{
+	out, err := u.saveds.List(repository.SavedListQ{
 		UserID: in.Actor.UserID,
 		Limit:  in.Limit,
 		Offset: in.Offset,

@@ -2,7 +2,7 @@ package usecase
 
 import (
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 	"encoding/json"
 )
 
@@ -46,15 +46,15 @@ type CloseSessionIn struct {
 }
 
 type sessionUsecase struct {
-	sessions port.SessionRepository
-	audits   port.AuditRepository
+	sessions repository.SessionRepository
+	audits   repository.AuditRepository
 	val      SearchVal
 	clock    Clock
 }
 
 func NewSessionUsecase(
-	sessions port.SessionRepository,
-	audits port.AuditRepository,
+	sessions repository.SessionRepository,
+	audits repository.AuditRepository,
 	val SearchVal,
 	clock Clock,
 ) SessionUC {
@@ -112,7 +112,7 @@ func (u *sessionUsecase) ListHistory(in ListHistoryIn) ([]entity.Session, error)
 		return nil, err
 	}
 
-	out, err := u.sessions.ListHistory(port.HistoryQ{
+	out, err := u.sessions.ListHistory(repository.HistoryQ{
 		UserID: in.Actor.UserID,
 		Limit:  in.Limit,
 		Offset: in.Offset,

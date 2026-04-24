@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
+	"coffee-spa/repository"
 )
 
 func TestBeanUsecase_Create(t *testing.T) {
@@ -41,7 +41,7 @@ func TestBeanUsecase_Update(t *testing.T) {
 }
 
 func TestBeanUsecase_List(t *testing.T) {
-	uc := NewBeanUsecase(beanRepoMock{listFn: func(q port.BeanListQ) ([]entity.Bean, error) {
+	uc := NewBeanUsecase(beanRepoMock{listFn: func(q repository.BeanListQ) ([]entity.Bean, error) {
 		return []entity.Bean{{ID: 1, Name: q.Q}}, nil
 	}}, &auditRepoMock{}, beanValMock{})
 	out, err := uc.List(BeanListIn{Q: "abc", Limit: 5})

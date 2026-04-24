@@ -1,20 +1,51 @@
 package repository
 
 import (
+	"coffee-spa/apperr"
+	"coffee-spa/entity"
 	"errors"
 	"fmt"
 	"strings"
 
-	"coffee-spa/apperr"
-	"coffee-spa/entity"
-	"coffee-spa/usecase/port"
-
 	"gorm.io/gorm"
 )
+
+type BeanRepository interface {
+	Create(bean *entity.Bean) error
+	Update(bean *entity.Bean) error
+	GetByID(id uint) (*entity.Bean, error)
+	List(q BeanListQ) ([]entity.Bean, error)
+	SearchByPref(pref entity.Pref, limit int) ([]entity.Bean, error)
+}
+
+type RecipeRepository interface {
+	Create(recipe *entity.Recipe) error
+	Update(recipe *entity.Recipe) error
+	GetByID(id uint) (*entity.Recipe, error)
+	List(q RecipeListQ) ([]entity.Recipe, error)
+	FindPrimaryByBean(beanID uint, method entity.Method, tempPref entity.TempPref) (*entity.Recipe, error)
+}
 
 // 豆データの保存・更新・取得・一覧・条件検索。
 type beanRepository struct {
 	db *gorm.DB
+}
+
+type BeanListQ struct {
+	Q      string
+	Roast  entity.Roast
+	Active *bool
+	Limit  int
+	Offset int
+}
+
+type RecipeListQ struct {
+	BeanID   *uint
+	Method   entity.Method
+	TempPref entity.TempPref
+	Active   *bool
+	Limit    int
+	Offset   int
 }
 
 // レシピの保存・更新・取得・一覧・レシピ選定。
@@ -22,7 +53,7 @@ type recipeRepository struct {
 	db *gorm.DB
 }
 
-func NewBeanRepository(db *gorm.DB) port.BeanRepository {
+func NewBeanRepository(db *gorm.DB) BeanRepository {
 	return &beanRepository{
 		db: db,
 	}
@@ -110,7 +141,7 @@ func (r *beanRepository) GetByID(id uint) (*entity.Bean, error) {
 
 // Bean一覧を取得。
 // q / roast / active / pagination条件に対応する。
-func (r *beanRepository) List(q port.BeanListQ) ([]entity.Bean, error) {
+func (r *beanRepository) List(q BeanListQ) ([]entity.Bean, error) {
 	var beans []entity.Bean
 
 	// Beanテーブルをもとに検索クエリ。
@@ -249,7 +280,7 @@ func applyBeanExcludes(tx *gorm.DB, excludes []string) *gorm.DB {
 	return tx
 }
 
-func NewRecipeRepository(db *gorm.DB) port.RecipeRepository {
+func NewRecipeRepository(db *gorm.DB) RecipeRepository {
 	return &recipeRepository{
 		db: db,
 	}
@@ -336,7 +367,7 @@ func (r *recipeRepository) GetByID(id uint) (*entity.Recipe, error) {
 }
 
 // recipe一覧を取得。
-func (r *recipeRepository) List(q port.RecipeListQ) ([]entity.Recipe, error) {
+func (r *recipeRepository) List(q RecipeListQ) ([]entity.Recipe, error) {
 	var recipes []entity.Recipe
 
 	// Recipeテーブルを起点にして、必要なBean先読み取り。
