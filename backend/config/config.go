@@ -28,6 +28,15 @@ type Cfg struct {
 	//admin seed
 	SeedAdminEmail    string
 	SeedAdminPassword string
+
+	RedisHost     string
+	RedisPort     string
+	RedisDB       int
+	RedisPassword string
+
+	GeminiUseMock bool
+	GeminiAPIKey  string
+	GeminiModel   string
 }
 
 func Load() (Cfg, error) {
@@ -64,6 +73,18 @@ func Load() (Cfg, error) {
 	//admin seed
 	c.SeedAdminEmail = getenv("SEED_ADMIN_EMAIL", "admin@test.com")
 	c.SeedAdminPassword = getenv("SEED_ADMIN_PASSWORD", "AdminPass123!")
+
+	c.RedisHost = getenv("REDIS_HOST", "localhost")
+	c.RedisPort = getenv("REDIS_PORT", "6379")
+	c.RedisPassword = getenv("REDIS_PASSWORD", "")
+	redisDB, err := strconv.Atoi(getenv("REDIS_DB", "0"))
+	if err != nil {
+		redisDB = 0
+	}
+	c.RedisDB = redisDB
+	c.GeminiUseMock = getenv("GEMINI_USE_MOCK", "true") == "true"
+	c.GeminiAPIKey = getenv("GEMINI_API_KEY", "")
+	c.GeminiModel = getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
 	return c, nil
 }

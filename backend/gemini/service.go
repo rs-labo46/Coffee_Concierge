@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -27,14 +26,12 @@ type Service struct {
 
 // envからGemini設定を読み込んで生成する。
 // モデル種別はenvから受け、コードへ直書きしない。
-func NewService() (*Service, error) {
-	apiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
-	if apiKey == "" {
+func NewService(apiKey string, model string) (*Service, error) {
+	if strings.TrimSpace(apiKey) == "" {
 		return nil, errors.New("GEMINI_API_KEY is empty")
 	}
 
-	model := strings.TrimSpace(os.Getenv("GEMINI_MODEL"))
-	if model == "" {
+	if strings.TrimSpace(model) == "" {
 		return nil, errors.New("GEMINI_MODEL is empty")
 	}
 

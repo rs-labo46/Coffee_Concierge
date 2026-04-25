@@ -4,6 +4,7 @@ import (
 	"coffee-spa/config"
 	"coffee-spa/controller"
 	"coffee-spa/db"
+	"coffee-spa/gemini"
 	"coffee-spa/repository"
 	"coffee-spa/router"
 	"coffee-spa/usecase"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -37,14 +37,9 @@ func main() {
 		}
 	}
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr: redisAddr(),
-	})
+	rdb := db.NewRedis(c)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if err := rdb.Ping(ctx).Err(); err != nil {
+	if err := db.PingRedis(context.Background(), rdb); err != nil {
 		log.Fatal(err)
 	}
 
@@ -109,7 +104,7 @@ func main() {
 		auditRepo,
 		searchVal,
 		usecase.NewCoffeeRanker(),
-		newGeminiClient(),
+		gemini.NewClient(c),
 		clock,
 		idGen,
 		24*time.Hour,
