@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -51,6 +53,61 @@ type RecipeListQ struct {
 // レシピの保存・更新・取得・一覧・レシピ選定。
 type recipeRepository struct {
 	db *gorm.DB
+}
+
+type recipeRow struct {
+	ID        uint           `gorm:"column:id"`
+	BeanID    uint           `gorm:"column:bean_id"`
+	Name      string         `gorm:"column:name"`
+	Method    string         `gorm:"column:method"`
+	TempPref  string         `gorm:"column:temp_pref"`
+	Grind     string         `gorm:"column:grind"`
+	Ratio     string         `gorm:"column:ratio"`
+	Temp      int            `gorm:"column:temp"`
+	TimeSec   int            `gorm:"column:time_sec"`
+	Steps     pq.StringArray `gorm:"column:steps;type:text[]"`
+	Desc      string         `gorm:"column:desc"`
+	Active    bool           `gorm:"column:active"`
+	CreatedAt time.Time      `gorm:"column:created_at"`
+	UpdatedAt time.Time      `gorm:"column:updated_at"`
+}
+
+func recipeRowFromEntity(recipe *entity.Recipe) recipeRow {
+	return recipeRow{
+		ID:        recipe.ID,
+		BeanID:    recipe.BeanID,
+		Name:      recipe.Name,
+		Method:    string(recipe.Method),
+		TempPref:  string(recipe.TempPref),
+		Grind:     recipe.Grind,
+		Ratio:     recipe.Ratio,
+		Temp:      recipe.Temp,
+		TimeSec:   recipe.TimeSec,
+		Steps:     pq.StringArray(recipe.Steps),
+		Desc:      recipe.Desc,
+		Active:    recipe.Active,
+		CreatedAt: recipe.CreatedAt,
+		UpdatedAt: recipe.UpdatedAt,
+	}
+}
+
+func recipeRowToEntity(row recipeRow) entity.Recipe {
+	return entity.Recipe{
+		ID:        row.ID,
+		BeanID:    row.BeanID,
+		Name:      row.Name,
+		Method:    entity.Method(row.Method),
+		TempPref:  entity.TempPref(row.TempPref),
+		Grind:     row.Grind,
+		Ratio:     row.Ratio,
+		Temp:      row.Temp,
+		TimeSec:   row.TimeSec,
+		Steps:     []string(row.Steps),
+		Desc:      row.Desc,
+		Active:    row.Active,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}
 }
 
 func NewBeanRepository(db *gorm.DB) BeanRepository {
@@ -288,34 +345,37 @@ func NewRecipeRepository(db *gorm.DB) RecipeRepository {
 
 // recipeを新規作成。
 func (r *recipeRepository) Create(recipe *entity.Recipe) error {
-	// nilは保存対象がないため不正状態。
 	if recipe == nil {
 		return apperr.ErrInvalidState
 	}
 
-	// レコードをINSERT。
-	err := r.db.Create(recipe).Error
+	row := recipeRowFromEntity(recipe)
+
+	err := r.db.Table("recipes").Create(&row).Error
 	if err != nil {
-		// unique / FK制約違反はconflict。
 		if isDup(err) || isFK(err) {
 			return apperr.ErrConflict
 		}
 		return apperr.ErrInternal
 	}
 
+	recipe.ID = row.ID
+	recipe.CreatedAt = row.CreatedAt
+	recipe.UpdatedAt = row.UpdatedAt
+
 	return nil
 }
 
 // recipeを更新。
 func (r *recipeRepository) Update(recipe *entity.Recipe) error {
-	// nilまたはID未設定は更新対象を特定できないため不正。
 	if recipe == nil || recipe.ID == 0 {
 		return apperr.ErrInvalidState
 	}
 
-	// 更新対象カラムを明示して更新。
+	row := recipeRowFromEntity(recipe)
+
 	err := r.db.
-		Model(&entity.Recipe{}).
+		Table("recipes").
 		Where("id = ?", recipe.ID).
 		Select(
 			"bean_id",
@@ -331,7 +391,7 @@ func (r *recipeRepository) Update(recipe *entity.Recipe) error {
 			"active",
 			"updated_at",
 		).
-		Updates(recipe).
+		Updates(&row).
 		Error
 	if err != nil {
 		if isDup(err) || isFK(err) {
@@ -349,12 +409,12 @@ func (r *recipeRepository) GetByID(id uint) (*entity.Recipe, error) {
 		return nil, apperr.ErrNotFound
 	}
 
-	var recipe entity.Recipe
+	var row recipeRow
 
-	// 参照側でBean情報も使いやすいようにpreload。
 	err := r.db.
-		Preload("Bean").
-		First(&recipe, id).
+		Table("recipes").
+		Where("id = ?", id).
+		First(&row).
 		Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -363,39 +423,44 @@ func (r *recipeRepository) GetByID(id uint) (*entity.Recipe, error) {
 		return nil, apperr.ErrInternal
 	}
 
+	recipe := recipeRowToEntity(row)
+
+	var bean entity.Bean
+	err = r.db.First(&bean, recipe.BeanID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.ErrInternal
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	recipe.Bean = bean
+
 	return &recipe, nil
 }
 
 // recipe一覧を取得。
 func (r *recipeRepository) List(q RecipeListQ) ([]entity.Recipe, error) {
-	var recipes []entity.Recipe
+	var rows []recipeRow
 
-	// Recipeテーブルを起点にして、必要なBean先読み取り。
-	tx := r.db.
-		Model(&entity.Recipe{}).
-		Preload("Bean")
+	tx := r.db.Table("recipes")
 
-	// beanIDが指定されていれば、そのBeanに紐づくrecipeのみに絞る。
 	if q.BeanID != nil {
 		tx = tx.Where("bean_id = ?", *q.BeanID)
 	}
 
-	// method指定があれば抽出方法で絞る。
 	if q.Method != "" {
 		tx = tx.Where("method = ?", q.Method)
 	}
 
-	// tempPref指定があれば温度で絞る。
 	if q.TempPref != "" {
 		tx = tx.Where("temp_pref = ?", q.TempPref)
 	}
 
-	// active指定があれば公開状態で絞る。
 	if q.Active != nil {
 		tx = tx.Where("active = ?", *q.Active)
 	}
 
-	// limitは未指定なら20、上限は100に。
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 20
@@ -404,22 +469,56 @@ func (r *recipeRepository) List(q RecipeListQ) ([]entity.Recipe, error) {
 		limit = 100
 	}
 
-	// offsetはマイナスを許可しない。
 	offset := q.Offset
 	if offset < 0 {
 		offset = 0
 	}
 
-	// 一覧の順序が安定するようbean_id → idの順で。
 	err := tx.
 		Order("bean_id ASC").
 		Order("id ASC").
 		Limit(limit).
 		Offset(offset).
-		Find(&recipes).
+		Find(&rows).
 		Error
 	if err != nil {
 		return nil, apperr.ErrInternal
+	}
+
+	recipes := make([]entity.Recipe, 0, len(rows))
+	beanIDs := make([]uint, 0, len(rows))
+	seen := map[uint]struct{}{}
+
+	for _, row := range rows {
+		recipe := recipeRowToEntity(row)
+		recipes = append(recipes, recipe)
+
+		if _, ok := seen[recipe.BeanID]; ok {
+			continue
+		}
+
+		seen[recipe.BeanID] = struct{}{}
+		beanIDs = append(beanIDs, recipe.BeanID)
+	}
+
+	if len(beanIDs) == 0 {
+		return recipes, nil
+	}
+
+	var beans []entity.Bean
+	if err := r.db.Where("id IN ?", beanIDs).Find(&beans).Error; err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	beanByID := make(map[uint]entity.Bean, len(beans))
+	for _, bean := range beans {
+		beanByID[bean.ID] = bean
+	}
+
+	for i := range recipes {
+		if bean, ok := beanByID[recipes[i].BeanID]; ok {
+			recipes[i].Bean = bean
+		}
 	}
 
 	return recipes, nil
@@ -440,7 +539,7 @@ func (r *recipeRepository) FindPrimaryByBean(
 		return nil, apperr.ErrNotFound
 	}
 
-	var recipe entity.Recipe
+	var row recipeRow
 
 	orderExpr := fmt.Sprintf(
 		"CASE "+
@@ -454,15 +553,13 @@ func (r *recipeRepository) FindPrimaryByBean(
 		string(tempPref),
 	)
 
-	// activeなrecipeから優先順位順で1件選ぶ。
 	err := r.db.
-		Model(&entity.Recipe{}).
-		Preload("Bean").
+		Table("recipes").
 		Where("bean_id = ?", beanID).
 		Where("active = ?", true).
 		Order(orderExpr).
 		Order("id ASC").
-		First(&recipe).
+		First(&row).
 		Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -470,6 +567,19 @@ func (r *recipeRepository) FindPrimaryByBean(
 		}
 		return nil, apperr.ErrInternal
 	}
+
+	recipe := recipeRowToEntity(row)
+
+	var bean entity.Bean
+	err = r.db.First(&bean, recipe.BeanID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperr.ErrInternal
+		}
+		return nil, apperr.ErrInternal
+	}
+
+	recipe.Bean = bean
 
 	return &recipe, nil
 }

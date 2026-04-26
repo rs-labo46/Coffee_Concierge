@@ -249,7 +249,10 @@ func (u *searchFlowUsecase) SetPref(in SetPrefIn) (SetPrefOut, error) {
 	}
 
 	now := u.clock.Now()
-
+	excludes := in.Excludes
+	if excludes == nil {
+		excludes = []string{}
+	}
 	pref := &entity.Pref{
 		SessionID:  session.ID,
 		Flavor:     in.Flavor,
@@ -261,7 +264,7 @@ func (u *searchFlowUsecase) SetPref(in SetPrefIn) (SetPrefOut, error) {
 		Method:     in.Method,
 		Scene:      in.Scene,
 		TempPref:   in.TempPref,
-		Excludes:   in.Excludes,
+		Excludes:   excludes,
 		Note:       in.Note,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -450,6 +453,9 @@ func (u *searchFlowUsecase) PatchPref(in PatchPrefIn) (PatchPrefOut, error) {
 	}
 	if in.Excludes != nil {
 		pref.Excludes = in.Excludes
+	}
+	if pref.Excludes == nil {
+		pref.Excludes = []string{}
 	}
 	if in.Note != nil {
 		pref.Note = *in.Note
@@ -910,6 +916,9 @@ func (u *searchFlowUsecase) applyDiff(pref *entity.Pref, diff ConditionDiff) {
 	}
 	if diff.Excludes != nil {
 		pref.Excludes = diff.Excludes
+	}
+	if pref.Excludes == nil {
+		pref.Excludes = []string{}
 	}
 	if diff.Note != nil {
 		pref.Note = *diff.Note

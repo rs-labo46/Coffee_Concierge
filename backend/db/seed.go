@@ -7,6 +7,7 @@ import (
 
 	"coffee-spa/entity"
 
+	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -22,6 +23,14 @@ func SeedDev(db *gorm.DB, adminEmail string, adminPassword string) error {
 		}
 
 		if err := seedItems(tx); err != nil {
+			return err
+		}
+
+		if err := seedBeans(tx); err != nil {
+			return err
+		}
+
+		if err := seedRecipes(tx); err != nil {
 			return err
 		}
 
@@ -123,15 +132,15 @@ func seedSources(db *gorm.DB) error {
 		},
 		{
 			Name:    "Roast Journal",
-			SiteURL: "https://example.com/coffee-daily",
+			SiteURL: "https://example.com/roast-journal",
 		},
 		{
 			Name:    "Home Brew Note",
-			SiteURL: "https://example.com/coffee-daily",
+			SiteURL: "https://example.com/home-brew-note",
 		},
 		{
 			Name:    "Cafe Guide",
-			SiteURL: "https://example.com/coffee-daily",
+			SiteURL: "https://example.com/cafe-guide",
 		},
 	}
 
@@ -202,6 +211,196 @@ func seedItems(db *gorm.DB) error {
 			if err := db.Create(&item).Error; err != nil {
 				return err
 			}
+		}
+	}
+
+	return nil
+}
+
+func seedBeans(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&entity.Bean{}).Count(&count).Error; err != nil {
+		return err
+	}
+
+	if count > 0 {
+		return nil
+	}
+
+	beans := []entity.Bean{
+		{
+			Name:       "Ethiopia Floral Light",
+			Roast:      entity.RoastLight,
+			Origin:     "Ethiopia",
+			Flavor:     5,
+			Acidity:    4,
+			Bitterness: 1,
+			Body:       2,
+			Aroma:      5,
+			Desc:       "花のような香りと明るい酸味を持つ浅煎り豆です。",
+			BuyURL:     "https://example.com/beans/ethiopia-floral-light",
+			Active:     true,
+		},
+		{
+			Name:       "Brazil Balance Medium",
+			Roast:      entity.RoastMedium,
+			Origin:     "Brazil",
+			Flavor:     3,
+			Acidity:    2,
+			Bitterness: 3,
+			Body:       3,
+			Aroma:      3,
+			Desc:       "ナッツ感と甘さのバランスがよい中煎り豆です。",
+			BuyURL:     "https://example.com/beans/brazil-balance-medium",
+			Active:     true,
+		},
+		{
+			Name:       "Colombia Morning Comfort",
+			Roast:      entity.RoastMedium,
+			Origin:     "Colombia",
+			Flavor:     4,
+			Acidity:    3,
+			Bitterness: 2,
+			Body:       3,
+			Aroma:      4,
+			Desc:       "朝に飲みやすい、甘さと香りのバランスが取れた豆です。",
+			BuyURL:     "https://example.com/beans/colombia-morning-comfort",
+			Active:     true,
+		},
+		{
+			Name:       "Indonesia Deep Body",
+			Roast:      entity.RoastDark,
+			Origin:     "Indonesia",
+			Flavor:     2,
+			Acidity:    1,
+			Bitterness: 5,
+			Body:       5,
+			Aroma:      3,
+			Desc:       "深いコクとしっかりした苦味を持つ深煎り豆です。",
+			BuyURL:     "https://example.com/beans/indonesia-deep-body",
+			Active:     true,
+		},
+	}
+
+	for _, bean := range beans {
+		if err := db.Create(&bean).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func seedRecipes(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&entity.Recipe{}).Count(&count).Error; err != nil {
+		return err
+	}
+
+	if count > 0 {
+		return nil
+	}
+
+	var beans []entity.Bean
+	if err := db.Order("id asc").Find(&beans).Error; err != nil {
+		return err
+	}
+
+	if len(beans) == 0 {
+		return fmt.Errorf("seed bean not found")
+	}
+
+	type seedRecipe struct {
+		BeanID   uint
+		Name     string
+		Method   entity.Method
+		TempPref entity.TempPref
+		Grind    string
+		Ratio    string
+		Temp     int
+		TimeSec  int
+		Steps    []string
+		Desc     string
+		Active   bool
+	}
+
+	recipes := make([]seedRecipe, 0, len(beans)*2)
+
+	for _, bean := range beans {
+		recipes = append(recipes, seedRecipe{
+			BeanID:   bean.ID,
+			Name:     bean.Name + " Drip Recipe",
+			Method:   entity.MethodDrip,
+			TempPref: entity.TempHot,
+			Grind:    "medium",
+			Ratio:    "1:15",
+			Temp:     92,
+			TimeSec:  180,
+			Steps: []string{
+				"豆を中挽きにする",
+				"お湯を少量注いで30秒蒸らす",
+				"残りのお湯を2回に分けて注ぐ",
+			},
+			Desc:   "豆の個性を確認しやすい基本のハンドドリップレシピです。",
+			Active: true,
+		})
+
+		recipes = append(recipes, seedRecipe{
+			BeanID:   bean.ID,
+			Name:     bean.Name + " Iced Recipe",
+			Method:   entity.MethodIced,
+			TempPref: entity.TempIce,
+			Grind:    "medium-fine",
+			Ratio:    "1:10",
+			Temp:     90,
+			TimeSec:  150,
+			Steps: []string{
+				"氷をサーバーに入れる",
+				"濃いめに抽出する",
+				"抽出後すぐに氷で冷やす",
+			},
+			Desc:   "氷で薄まる前提で濃度を高めにしたアイス向けレシピです。",
+			Active: true,
+		})
+	}
+
+	now := time.Now()
+
+	for _, recipe := range recipes {
+		if err := db.Exec(
+			`
+			INSERT INTO recipes (
+				bean_id,
+				name,
+				method,
+				temp_pref,
+				grind,
+				ratio,
+				temp,
+				time_sec,
+				steps,
+				"desc",
+				active,
+				created_at,
+				updated_at
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`,
+			recipe.BeanID,
+			recipe.Name,
+			string(recipe.Method),
+			string(recipe.TempPref),
+			recipe.Grind,
+			recipe.Ratio,
+			recipe.Temp,
+			recipe.TimeSec,
+			pq.Array(recipe.Steps),
+			recipe.Desc,
+			recipe.Active,
+			now,
+			now,
+		).Error; err != nil {
+			return err
 		}
 	}
 
@@ -355,7 +554,7 @@ func buildRecipeItems(now time.Time, sourceID uint) []entity.Item {
 			Summary:     seedSummary(titles[i], summaries[i]),
 			URL:         strOrEmpty(urls[i]),
 			ImageURL:    strOrEmpty(images[i]),
-			Kind:        entity.ItemKindNews,
+			Kind:        entity.ItemKindRecipe,
 			SourceID:    sourceID,
 			PublishedAt: now.Add(time.Duration(-(i + 1)) * 6 * time.Hour),
 		})

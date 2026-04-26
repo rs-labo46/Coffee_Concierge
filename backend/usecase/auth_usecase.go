@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+
+	"strings"
 	"time"
 
 	"coffee-spa/entity"
@@ -175,7 +177,8 @@ func NewAuthUsecase(
 
 // 新規登録を行う。
 func (u *authUsecase) Signup(in SignupIn) (SignupOut, error) {
-	if err := u.val.Signup(in.Email, in.Password); err != nil {
+	email := normalizeEmail(in.Email)
+	if err := u.val.Signup(email, in.Password); err != nil {
 		return SignupOut{}, err
 	}
 
@@ -187,7 +190,7 @@ func (u *authUsecase) Signup(in SignupIn) (SignupOut, error) {
 	now := u.clock.Now()
 
 	user := &entity.User{
-		Email:         in.Email,
+		Email:         email,
 		PassHash:      passHash,
 		Role:          entity.RoleUser,
 		TokenVer:      1,
@@ -298,11 +301,12 @@ func (u *authUsecase) VerifyEmail(in VerifyEmailIn) error {
 
 // email / password認証後にaccess tokenとrefresh tokenを発行する。
 func (u *authUsecase) Login(in LoginIn) (LoginOut, error) {
-	if err := u.val.Login(in.Email, in.Password); err != nil {
+	email := normalizeEmail(in.Email)
+	if err := u.val.Login(email, in.Password); err != nil {
 		return LoginOut{}, err
 	}
 
-	user, err := u.users.GetByEmail(in.Email)
+	user, err := u.users.GetByEmail(email)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return LoginOut{}, ErrUnauthorized
@@ -368,6 +372,7 @@ func (u *authUsecase) Login(in LoginIn) (LoginOut, error) {
 		AccessToken:  accessToken,
 		RefreshToken: refreshPlain,
 	}, nil
+
 }
 
 // refresh rotationを行う。
@@ -513,10 +518,11 @@ func (u *authUsecase) Logout(actor entity.Actor, refreshToken string) error {
 
 // 再設定tokenを発行する。
 func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
-	if err := u.val.Email(in.Email); err != nil {
+	email := normalizeEmail(in.Email)
+	if err := u.val.Email(email); err != nil {
 		return err
 	}
-	user, err := u.users.GetByEmail(in.Email)
+	user, err := u.users.GetByEmail(email)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			// 存在有無は外に漏らさない。
@@ -572,10 +578,11 @@ func (u *authUsecase) ForgotPw(in ForgotPwIn) error {
 
 // 認証メールを再送する。
 func (u *authUsecase) ResendVerify(in ResendVerifyIn) error {
-	if err := u.val.Email(in.Email); err != nil {
+	email := normalizeEmail(in.Email)
+	if err := u.val.Email(email); err != nil {
 		return err
 	}
-	user, err := u.users.GetByEmail(in.Email)
+	user, err := u.users.GetByEmail(email)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			// 存在有無は外に漏らさない。
@@ -734,4 +741,7 @@ func (u *authUsecase) writeAudit(
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+func normalizeEmail(v string) string {
+	return strings.ToLower(strings.TrimSpace(v))
 }

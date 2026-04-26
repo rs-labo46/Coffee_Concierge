@@ -7,6 +7,7 @@ import (
 	"coffee-spa/apperr"
 	"coffee-spa/entity"
 
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -37,6 +38,72 @@ type HistoryQ struct {
 
 type sessionRepository struct {
 	db *gorm.DB
+}
+type prefModel struct {
+	ID         uint            `gorm:"column:id;primaryKey"`
+	SessionID  uint            `gorm:"column:session_id"`
+	Flavor     int             `gorm:"column:flavor"`
+	Acidity    int             `gorm:"column:acidity"`
+	Bitterness int             `gorm:"column:bitterness"`
+	Body       int             `gorm:"column:body"`
+	Aroma      int             `gorm:"column:aroma"`
+	Mood       entity.Mood     `gorm:"column:mood"`
+	Method     entity.Method   `gorm:"column:method"`
+	Scene      entity.Scene    `gorm:"column:scene"`
+	TempPref   entity.TempPref `gorm:"column:temp_pref"`
+	Excludes   pq.StringArray  `gorm:"column:excludes;type:text[];not null"`
+	Note       string          `gorm:"column:note"`
+	CreatedAt  time.Time       `gorm:"column:created_at"`
+	UpdatedAt  time.Time       `gorm:"column:updated_at"`
+}
+
+func toPrefModel(p *entity.Pref) prefModel {
+	excludes := p.Excludes
+	if excludes == nil {
+		excludes = []string{}
+	}
+
+	return prefModel{
+		ID:         p.ID,
+		SessionID:  p.SessionID,
+		Flavor:     p.Flavor,
+		Acidity:    p.Acidity,
+		Bitterness: p.Bitterness,
+		Body:       p.Body,
+		Aroma:      p.Aroma,
+		Mood:       p.Mood,
+		Method:     p.Method,
+		Scene:      p.Scene,
+		TempPref:   p.TempPref,
+		Excludes:   pq.StringArray(excludes),
+		Note:       p.Note,
+		CreatedAt:  p.CreatedAt,
+		UpdatedAt:  p.UpdatedAt,
+	}
+}
+
+func toPrefEntity(m prefModel) entity.Pref {
+	return entity.Pref{
+		ID:         m.ID,
+		SessionID:  m.SessionID,
+		Flavor:     m.Flavor,
+		Acidity:    m.Acidity,
+		Bitterness: m.Bitterness,
+		Body:       m.Body,
+		Aroma:      m.Aroma,
+		Mood:       m.Mood,
+		Method:     m.Method,
+		Scene:      m.Scene,
+		TempPref:   m.TempPref,
+		Excludes:   []string(m.Excludes),
+		Note:       m.Note,
+		CreatedAt:  m.CreatedAt,
+		UpdatedAt:  m.UpdatedAt,
+	}
+}
+
+func (prefModel) TableName() string {
+	return "prefs"
 }
 
 func NewSessionRepository(db *gorm.DB) SessionRepository {
@@ -237,32 +304,32 @@ func (r *sessionRepository) CreatePref(pref *entity.Pref) error {
 		return apperr.ErrInvalidState
 	}
 
-	// レコードをINSERT 。
-	err := r.db.Create(pref).Error
+	m := toPrefModel(pref)
+
+	err := r.db.Create(&m).Error
 	if err != nil {
-		// unique / FK 制約違反はconflict。
 		if isDup(err) || isFK(err) {
 			return apperr.ErrConflict
 		}
 		return apperr.ErrInternal
 	}
 
+	*pref = toPrefEntity(m)
+
 	return nil
 }
 
 // 既存のprefを更新。
 func (r *sessionRepository) UpdatePref(pref *entity.Pref) error {
-
 	if pref == nil || pref.ID == 0 {
 		return apperr.ErrInvalidState
 	}
 
-	// 更新可能カラムだけを明示して更新。
-	err := r.db.
-		Model(&entity.Pref{}).
-		Where("id = ?", pref.ID).
+	m := toPrefModel(pref)
+
+	err := r.db.Model(&prefModel{}).
+		Where("id = ?", m.ID).
 		Select(
-			"session_id",
 			"flavor",
 			"acidity",
 			"bitterness",
@@ -276,8 +343,7 @@ func (r *sessionRepository) UpdatePref(pref *entity.Pref) error {
 			"note",
 			"updated_at",
 		).
-		Updates(pref).
-		Error
+		Updates(&m).Error
 	if err != nil {
 		if isDup(err) || isFK(err) {
 			return apperr.ErrConflict
@@ -294,19 +360,19 @@ func (r *sessionRepository) GetPrefBySessionID(sessionID uint) (*entity.Pref, er
 		return nil, apperr.ErrNotFound
 	}
 
-	var pref entity.Pref
+	var m prefModel
 
-	// 1件取得。
 	err := r.db.
 		Where("session_id = ?", sessionID).
-		First(&pref).
-		Error
+		First(&m).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperr.ErrNotFound
 		}
 		return nil, apperr.ErrInternal
 	}
+
+	pref := toPrefEntity(m)
 
 	return &pref, nil
 }
@@ -361,10 +427,11 @@ func (r *sessionRepository) ListSuggestions(sessionID uint) ([]entity.Suggestion
 
 	var suggestions []entity.Suggestion
 
-	// 表示や詳細でそのまま使いやすいように関連をpreload 。
+	// RecipeはPreloadしない。
+	// recipes.steps はPostgreSQL text[] なので、entity.Recipeへ直接scanすると失敗する。
+	// Recipeだけは recipeRow 経由で手動取得する。
 	err := r.db.
 		Preload("Bean").
-		Preload("Recipe").
 		Preload("Item").
 		Preload("Item.Source").
 		Where("session_id = ?", sessionID).
@@ -376,9 +443,99 @@ func (r *sessionRepository) ListSuggestions(sessionID uint) ([]entity.Suggestion
 		return nil, apperr.ErrInternal
 	}
 
+	if err := attachRecipesToSuggestions(r.db, suggestions); err != nil {
+		return nil, err
+	}
+
 	return suggestions, nil
 }
 
+func attachRecipesToSuggestions(db *gorm.DB, suggestions []entity.Suggestion) error {
+	recipeIDs := make([]uint, 0, len(suggestions))
+	seen := make(map[uint]struct{}, len(suggestions))
+
+	for _, suggestion := range suggestions {
+		if suggestion.RecipeID == nil || *suggestion.RecipeID == 0 {
+			continue
+		}
+
+		if _, ok := seen[*suggestion.RecipeID]; ok {
+			continue
+		}
+
+		seen[*suggestion.RecipeID] = struct{}{}
+		recipeIDs = append(recipeIDs, *suggestion.RecipeID)
+	}
+
+	if len(recipeIDs) == 0 {
+		return nil
+	}
+
+	var rows []recipeRow
+	if err := db.
+		Table("recipes").
+		Where("id IN ?", recipeIDs).
+		Find(&rows).
+		Error; err != nil {
+		return apperr.ErrInternal
+	}
+
+	recipeByID := make(map[uint]entity.Recipe, len(rows))
+	beanIDs := make([]uint, 0, len(rows))
+	seenBean := make(map[uint]struct{}, len(rows))
+
+	for _, row := range rows {
+		recipe := recipeRowToEntity(row)
+		recipeByID[recipe.ID] = recipe
+
+		if _, ok := seenBean[recipe.BeanID]; ok {
+			continue
+		}
+
+		seenBean[recipe.BeanID] = struct{}{}
+		beanIDs = append(beanIDs, recipe.BeanID)
+	}
+
+	if len(beanIDs) > 0 {
+		var beans []entity.Bean
+		if err := db.
+			Where("id IN ?", beanIDs).
+			Find(&beans).
+			Error; err != nil {
+			return apperr.ErrInternal
+		}
+
+		beanByID := make(map[uint]entity.Bean, len(beans))
+		for _, bean := range beans {
+			beanByID[bean.ID] = bean
+		}
+
+		for id, recipe := range recipeByID {
+			if bean, ok := beanByID[recipe.BeanID]; ok {
+				recipe.Bean = bean
+				recipeByID[id] = recipe
+			}
+		}
+	}
+
+	for i := range suggestions {
+		if suggestions[i].RecipeID == nil {
+			continue
+		}
+
+		recipe, ok := recipeByID[*suggestions[i].RecipeID]
+		if !ok {
+			continue
+		}
+
+		copied := recipe
+		suggestions[i].Recipe = &copied
+	}
+
+	return nil
+}
+
+// suggestionを1件取得。
 // suggestionを1件取得。
 func (r *sessionRepository) GetSuggestionByID(id uint) (*entity.Suggestion, error) {
 	if id == 0 {
@@ -387,10 +544,10 @@ func (r *sessionRepository) GetSuggestionByID(id uint) (*entity.Suggestion, erro
 
 	var suggestion entity.Suggestion
 
-	// 関連先読み取りした状態で取得。
+	// RecipeはPreloadしない。
+	// recipes.steps の text[] scan問題を避けるため、後段で手動取得する。
 	err := r.db.
 		Preload("Bean").
-		Preload("Recipe").
 		Preload("Item").
 		Preload("Item.Source").
 		First(&suggestion, id).
@@ -402,5 +559,10 @@ func (r *sessionRepository) GetSuggestionByID(id uint) (*entity.Suggestion, erro
 		return nil, apperr.ErrInternal
 	}
 
-	return &suggestion, nil
+	suggestions := []entity.Suggestion{suggestion}
+	if err := attachRecipesToSuggestions(r.db, suggestions); err != nil {
+		return nil, err
+	}
+
+	return &suggestions[0], nil
 }

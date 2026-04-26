@@ -2,9 +2,10 @@ package validator
 
 import (
 	"coffee-spa/usecase"
+	"net/mail"
+	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
-	"github.com/go-ozzo/ozzo-validation/v4/is"
 )
 
 // authValidator は AuthVal の具体実装。
@@ -34,7 +35,7 @@ func (v *authValidator) Signup(email string, pw string) error {
 			&in.Email,
 			validation.Required.Error("email is required"),
 			validation.RuneLength(1, 254).Error("email must be 1 to 254 chars"),
-			is.Email.Error("email must be valid"),
+			validation.By(validEmail),
 		),
 		// Passwordは必須。
 		//72文字以下、最低8文字以上に制限。
@@ -51,7 +52,7 @@ func (v *authValidator) Email(email string) error {
 	return validation.Validate(email,
 		validation.Required.Error("email is required"),
 		validation.RuneLength(1, 254).Error("email must be 1 to 254 chars"),
-		is.Email.Error("email must be valid"),
+		validation.By(validEmail),
 	)
 }
 
@@ -66,14 +67,12 @@ func (v *authValidator) Login(email string, pw string) error {
 	}
 
 	return validation.ValidateStruct(&in,
-		// Emailは必須かつメール形式。
 		validation.Field(
 			&in.Email,
 			validation.Required.Error("email is required"),
 			validation.RuneLength(1, 254).Error("email must be 1 to 254 chars"),
-			is.Email.Error("email must be valid"),
+			validation.By(validEmail),
 		),
-		// Passwordは必須。
 		validation.Field(
 			&in.Password,
 			validation.Required.Error("password is required"),
@@ -98,4 +97,31 @@ func (v *authValidator) Token(token string) error {
 		validation.Required.Error("token is required"),
 		validation.RuneLength(16, 512).Error("token must be 16 to 512 chars"),
 	)
+}
+
+func validEmail(v interface{}) error {
+	email, ok := v.(string)
+	if !ok {
+		return validation.NewError("email_invalid_type", "email must be valid")
+	}
+
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return nil
+	}
+
+	addr, err := mail.ParseAddress(email)
+	if err != nil {
+		return validation.NewError("email_invalid", "email must be valid")
+	}
+
+	if addr.Address != email {
+		return validation.NewError("email_invalid", "email must be valid")
+	}
+
+	if !strings.Contains(email, "@") {
+		return validation.NewError("email_invalid", "email must be valid")
+	}
+
+	return nil
 }

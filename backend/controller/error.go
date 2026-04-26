@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/labstack/echo/v4"
 )
 
@@ -24,32 +25,35 @@ func mapError(err error) (int, string, string) {
 	if err == nil {
 		return http.StatusInternalServerError, "internal", "internal server error"
 	}
+
+	var validationErrors validation.Errors
+	var validationError validation.Error
+
 	switch {
-	// controller層のbind・param・query失敗
 	case errors.Is(err, ErrInvalidRequest):
 		return http.StatusBadRequest, "invalid_request", "request body or query is invalid"
 
-	// 認証失敗(未ログイン、トークン不正、refresh拒否など)
+	case errors.As(err, &validationErrors):
+		return http.StatusBadRequest, "invalid_request", "request value is invalid"
+
+	case errors.As(err, &validationError):
+		return http.StatusBadRequest, "invalid_request", "request value is invalid"
+
 	case errors.Is(err, usecase.ErrUnauthorized):
 		return http.StatusUnauthorized, "unauthorized", "authentication failed"
 
-	// 権限不足
 	case errors.Is(err, usecase.ErrForbidden):
 		return http.StatusForbidden, "forbidden", "permission denied"
 
-	// 対象なし(存在しないidや、guest sessionの期限切れなど)
 	case errors.Is(err, usecase.ErrNotFound):
 		return http.StatusNotFound, "not_found", "resource not found"
 
-	// 重複や二重操作(既存メール重複、二重保存、すでに使用済み)
 	case errors.Is(err, usecase.ErrConflict):
 		return http.StatusConflict, "conflict", "resource conflict"
 
-	// used済みtokenを再利用する状態の不整合
 	case errors.Is(err, usecase.ErrInvalidState):
 		return http.StatusConflict, "conflict", "resource state is invalid"
 
-	// レート制限
 	case errors.Is(err, usecase.ErrRateLimited):
 		return http.StatusTooManyRequests, "rate_limited", "too many requests"
 
