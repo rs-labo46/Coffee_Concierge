@@ -57,6 +57,7 @@ func (v *itemValidator) Create(in usecase.CreateItemIn) error {
 		// SourceIDは1以上。
 		validation.Field(
 			&in.SourceID,
+			validation.Required.Error("source_id is required"),
 			validation.Min(uint(1)).Error("source_id must be greater than 0"),
 		),
 		// PublishedAtは必須。

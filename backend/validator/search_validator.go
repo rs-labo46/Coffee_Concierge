@@ -33,13 +33,13 @@ func (v *searchValidator) StartSession(in usecase.StartSessionIn) error {
 func (v *searchValidator) SetPref(in usecase.SetPrefIn) error {
 	return validation.ValidateStruct(&in,
 		// SessionIDは必須で1以上。
-		validation.Field(&in.SessionID, validation.Min(uint(1)).Error("session_id must be greater than 0")),
+		validation.Field(&in.SessionID, validation.Required.Error("session_id is required"), validation.Min(uint(1)).Error("session_id must be greater than 0")),
 		// 5軸スコアはすべて1〜5。
-		validation.Field(&in.Flavor, validation.Min(1), validation.Max(5)),
-		validation.Field(&in.Acidity, validation.Min(1), validation.Max(5)),
-		validation.Field(&in.Bitterness, validation.Min(1), validation.Max(5)),
-		validation.Field(&in.Body, validation.Min(1), validation.Max(5)),
-		validation.Field(&in.Aroma, validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Flavor, validation.Required.Error("flavor is required"), validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Acidity, validation.Required.Error("acidity is required"), validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Bitterness, validation.Required.Error("bitterness is required"), validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Body, validation.Required.Error("body is required"), validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Aroma, validation.Required.Error("aroma is required"), validation.Min(1), validation.Max(5)),
 		// Moodは許可enumを検証。
 		validation.Field(&in.Mood, validation.In(entity.MoodMorning, entity.MoodWork, entity.MoodRelax, entity.MoodNight)),
 		// Methodは許可enumを検証。
@@ -59,7 +59,7 @@ func (v *searchValidator) SetPref(in usecase.SetPrefIn) error {
 func (v *searchValidator) AddTurn(in usecase.AddTurnIn) error {
 	return validation.ValidateStruct(&in,
 		// SessionIDは1以上である必要がある。
-		validation.Field(&in.SessionID, validation.Min(uint(1)).Error("session_id must be greater than 0")),
+		validation.Field(&in.SessionID, validation.Required.Error("session_id is required"), validation.Min(uint(1)).Error("session_id must be greater than 0")),
 		// Bodyは必須で、1〜2000文字に制限。
 		validation.Field(
 			&in.Body,
@@ -91,7 +91,7 @@ func (v *searchValidator) PatchPref(in usecase.PatchPrefIn) error {
 
 	return validation.ValidateStruct(&in,
 		// SessionIDは必須で1以上。
-		validation.Field(&in.SessionID, validation.Min(uint(1)).Error("session_id must be greater than 0")),
+		validation.Field(&in.SessionID, validation.Required.Error("session_id is required"), validation.Min(uint(1)).Error("session_id must be greater than 0")),
 		// 各スコアは値がある場合だけ1〜5を検証。
 		validation.Field(&in.Flavor, validation.When(in.Flavor != nil, validation.Min(1), validation.Max(5))),
 		validation.Field(&in.Acidity, validation.When(in.Acidity != nil, validation.Min(1), validation.Max(5))),
@@ -119,6 +119,7 @@ func (v *searchValidator) PatchPref(in usecase.PatchPrefIn) error {
 // セッション詳細取得入力を検証。
 func (v *searchValidator) GetSession(in usecase.GetSessionIn) error {
 	return validation.Validate(in.SessionID,
+		validation.Required.Error("session_id is required"),
 		validation.Min(uint(1)).Error("session_id must be greater than 0"),
 	)
 }
@@ -127,7 +128,7 @@ func (v *searchValidator) GetSession(in usecase.GetSessionIn) error {
 func (v *searchValidator) ListHistory(in usecase.ListHistoryIn) error {
 	return validation.ValidateStruct(&in,
 		// limit/offsetの基本的なページング検証。
-		validation.Field(&in.Limit, validation.Min(1), validation.Max(50)),
+		validation.Field(&in.Limit, validation.Required.Error("limit is required"), validation.Min(1), validation.Max(50)),
 		validation.Field(&in.Offset, validation.Min(0)),
 	)
 }
@@ -135,6 +136,7 @@ func (v *searchValidator) ListHistory(in usecase.ListHistoryIn) error {
 // セッション終了入力を検証。
 func (v *searchValidator) CloseSession(in usecase.CloseSessionIn) error {
 	return validation.Validate(in.SessionID,
+		validation.Required.Error("session_id is required"),
 		validation.Min(uint(1)).Error("session_id must be greater than 0"),
 	)
 }

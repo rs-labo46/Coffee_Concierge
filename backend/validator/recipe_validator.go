@@ -122,24 +122,18 @@ func (v *recipeValidator) validateCreateOrUpdate(
 	steps []string,
 	desc string,
 ) error {
-	return validation.ValidateStruct(&struct {
-		Name string
-
-		Method entity.Method //抽出方法。
-
-		TempPref entity.TempPref //温度の好み。
-
-		Grind string //挽き目説明。
-
-		Ratio string //粉と湯の比率。
-
-		Temp int // 湯温。
-
-		TimeSec int //抽出時間(秒)。
-
-		Steps []string //手順一覧。
-
-		Desc string // 説明文。
+	// ozzo-validation の Field は、ValidateStruct に渡した構造体のフィールドポインタを渡す必要がある。
+	// ローカル変数のポインタを直接渡すと、field cannot be found になるため、一度構造体へ詰める。
+	in := struct {
+		Name     string
+		Method   entity.Method
+		TempPref entity.TempPref
+		Grind    string
+		Ratio    string
+		Temp     int
+		TimeSec  int
+		Steps    []string
+		Desc     string
 	}{
 		Name:     name,
 		Method:   method,
@@ -150,14 +144,16 @@ func (v *recipeValidator) validateCreateOrUpdate(
 		TimeSec:  timeSec,
 		Steps:    steps,
 		Desc:     desc,
-	},
+	}
+
+	return validation.ValidateStruct(&in,
 		// Nameは必須で1〜100文字。
-		validation.Field(&name,
+		validation.Field(&in.Name,
 			validation.Required.Error("name is required"),
 			validation.RuneLength(1, 100).Error("name must be 1 to 100 chars"),
 		),
 		// Methodは必須で、許可されたenumのどれかでなければならない。
-		validation.Field(&method,
+		validation.Field(&in.Method,
 			validation.Required.Error("method is required"),
 			validation.In(
 				entity.MethodDrip,
@@ -167,31 +163,31 @@ func (v *recipeValidator) validateCreateOrUpdate(
 			).Error("method is invalid"),
 		),
 		// TempPref必須でenumを検証。
-		validation.Field(&tempPref,
+		validation.Field(&in.TempPref,
 			validation.Required.Error("temp_pref is required"),
 			validation.In(entity.TempHot, entity.TempIce).Error("temp_pref is invalid"),
 		),
 		// Grind必須で1〜200文字。
-		validation.Field(&grind,
+		validation.Field(&in.Grind,
 			validation.Required.Error("grind is required"),
 			validation.RuneLength(1, 200).Error("grind must be 1 to 200 chars"),
 		),
 		// Ratio必須で1〜200文字。
-		validation.Field(&ratio,
+		validation.Field(&in.Ratio,
 			validation.Required.Error("ratio is required"),
 			validation.RuneLength(1, 200).Error("ratio must be 1 to 200 chars"),
 		),
-		// 温度は60〜100に制限。
-		validation.Field(&temp, validation.Min(60), validation.Max(100)),
-		// 秒数は1〜600秒に制限。
-		validation.Field(&timeSec, validation.Min(1), validation.Max(600)),
+		// 温度は必須で60〜100に制限。
+		validation.Field(&in.Temp, validation.Required.Error("temp is required"), validation.Min(60), validation.Max(100)),
+		// 秒数は必須で1〜600秒に制限。
+		validation.Field(&in.TimeSec, validation.Required.Error("time_sec is required"), validation.Min(1), validation.Max(600)),
 		// steps必須で、1〜20件に制限。
-		validation.Field(&steps,
+		validation.Field(&in.Steps,
 			validation.Required.Error("steps is required"),
 			validation.Length(1, 20).Error("steps count must be 1 to 20"),
 		),
 		// Desc必須で1〜1000文字。
-		validation.Field(&desc,
+		validation.Field(&in.Desc,
 			validation.Required.Error("desc is required"),
 			validation.RuneLength(1, 1000).Error("desc must be 1 to 1000 chars"),
 		),

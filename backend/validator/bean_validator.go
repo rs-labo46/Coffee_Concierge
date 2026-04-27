@@ -97,12 +97,13 @@ func (v *beanValidator) validateCreateOrUpdate(
 	flavor int,
 	acidity int,
 	bitterness int,
-	body int,
-	aroma int,
+	body int, aroma int,
 	desc string,
 	buyURL string,
 ) error {
-	return validation.ValidateStruct(&struct {
+	// ozzo-validation の Field は、ValidateStruct に渡した構造体のフィールドポインタを渡す必要がある。
+	// ローカル変数のポインタを直接渡すと、field cannot be found になるため、一度構造体へ詰める。
+	in := struct {
 		Name       string
 		Roast      entity.Roast
 		Origin     string
@@ -124,35 +125,37 @@ func (v *beanValidator) validateCreateOrUpdate(
 		Aroma:      aroma,
 		Desc:       desc,
 		BuyURL:     buyURL,
-	},
+	}
+
+	return validation.ValidateStruct(&in,
 		// Nameは必須で1〜100文字。
-		validation.Field(&name,
+		validation.Field(&in.Name,
 			validation.Required.Error("name is required"),
 			validation.RuneLength(1, 100).Error("name must be 1 to 100 chars"),
 		),
 		// Roastは必須で、許可enumのどれかである必要がある。
-		validation.Field(&roast,
+		validation.Field(&in.Roast,
 			validation.Required.Error("roast is required"),
 			validation.In(entity.RoastLight, entity.RoastMedium, entity.RoastDark).Error("roast is invalid"),
 		),
 		// Originは必須で1〜100文字。
-		validation.Field(&origin,
+		validation.Field(&in.Origin,
 			validation.Required.Error("origin is required"),
 			validation.RuneLength(1, 100).Error("origin must be 1 to 100 chars"),
 		),
-		// 各味覚スコアは1〜5。
-		validation.Field(&flavor, validation.Min(1), validation.Max(5)),
-		validation.Field(&acidity, validation.Min(1), validation.Max(5)),
-		validation.Field(&bitterness, validation.Min(1), validation.Max(5)),
-		validation.Field(&body, validation.Min(1), validation.Max(5)),
-		validation.Field(&aroma, validation.Min(1), validation.Max(5)),
+		// 各味覚スコアは必須で1〜5。
+		validation.Field(&in.Flavor, validation.Required.Error("flavor is required"), validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Acidity, validation.Required.Error("acidity is required"), validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Bitterness, validation.Required.Error("bitterness is required"), validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Body, validation.Required.Error("body is required"), validation.Min(1), validation.Max(5)),
+		validation.Field(&in.Aroma, validation.Required.Error("aroma is required"), validation.Min(1), validation.Max(5)),
 		// Descは必須で1〜1000文字。
-		validation.Field(&desc,
+		validation.Field(&in.Desc,
 			validation.Required.Error("desc is required"),
 			validation.RuneLength(1, 1000).Error("desc must be 1 to 1000 chars"),
 		),
 		// BuyURLは必須でURL形式でなければならない。
-		validation.Field(&buyURL,
+		validation.Field(&in.BuyURL,
 			validation.Required.Error("buy_url is required"),
 			is.URL.Error("buy_url must be valid"),
 		),

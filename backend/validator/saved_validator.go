@@ -18,9 +18,9 @@ func NewSavedValidator() usecase.SavedVal {
 func (v *savedValidator) Save(in usecase.SaveSuggestionIn) error {
 	return validation.ValidateStruct(&in,
 		// SessionIDは1以上。
-		validation.Field(&in.SessionID, validation.Min(uint(1)).Error("session_id must be greater than 0")),
+		validation.Field(&in.SessionID, validation.Required.Error("session_id is required"), validation.Min(uint(1)).Error("session_id must be greater than 0")),
 		// SuggestionIDも1以上。
-		validation.Field(&in.SuggestionID, validation.Min(uint(1)).Error("suggestion_id must be greater than 0")),
+		validation.Field(&in.SuggestionID, validation.Required.Error("suggestion_id is required"), validation.Min(uint(1)).Error("suggestion_id must be greater than 0")),
 	)
 }
 
@@ -28,7 +28,7 @@ func (v *savedValidator) Save(in usecase.SaveSuggestionIn) error {
 func (v *savedValidator) List(in usecase.ListSavedIn) error {
 	return validation.ValidateStruct(&in,
 		// 一覧系の基本ページング検証。
-		validation.Field(&in.Limit, validation.Min(1), validation.Max(50)),
+		validation.Field(&in.Limit, validation.Required.Error("limit is required"), validation.Min(1), validation.Max(50)),
 		validation.Field(&in.Offset, validation.Min(0)),
 	)
 }
@@ -36,6 +36,7 @@ func (v *savedValidator) List(in usecase.ListSavedIn) error {
 // Deleteは保存済み提案削除入力を検証。
 func (v *savedValidator) Delete(in usecase.DeleteSavedIn) error {
 	return validation.Validate(in.SuggestionID,
+		validation.Required.Error("suggestion_id is required"),
 		validation.Min(uint(1)).Error("suggestion_id must be greater than 0"),
 	)
 }

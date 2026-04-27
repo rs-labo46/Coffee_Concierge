@@ -30,13 +30,18 @@ func (v *auditValidator) List(in usecase.AuditListIn) error {
 		// 指定される場合だけ1以上かを見る。
 		validation.Field(
 			&in.UserID,
-			validation.When(
-				in.UserID != nil,
-				validation.Min(uint(1)).Error("user_id must be greater than 0"),
-			),
+			validation.By(func(value interface{}) error {
+				if in.UserID == nil {
+					return nil
+				}
+				if *in.UserID == 0 {
+					return validation.NewError("validation_user_id", "user_id must be greater than 0")
+				}
+				return nil
+			}),
 		),
 		// 一覧系のページング検証。
-		validation.Field(&in.Limit, validation.Min(1), validation.Max(100)),
+		validation.Field(&in.Limit, validation.Required.Error("limit is required"), validation.Min(1), validation.Max(100)),
 		validation.Field(&in.Offset, validation.Min(0)),
 	)
 }
