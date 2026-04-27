@@ -3,17 +3,18 @@ package gemini
 import (
 	"coffee-spa/config"
 	"coffee-spa/usecase"
+	"fmt"
 )
 
-func NewClient(c config.Cfg) usecase.GeminiClient {
+func NewClient(c config.Cfg) (usecase.GeminiClient, error) {
 	if c.GeminiUseMock {
-		return NewMockClient()
+		return NewMockClient(), nil
 	}
 
 	client, err := NewService(c.GeminiAPIKey, c.GeminiModel)
 	if err != nil {
-		return NewMockClient()
+		return nil, fmt.Errorf("new gemini service: %w", err)
 	}
 
-	return client
+	return client, nil
 }

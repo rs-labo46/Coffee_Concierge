@@ -84,7 +84,7 @@ func Load() (Cfg, error) {
 	c.RedisDB = redisDB
 	c.GeminiUseMock = getenv("GEMINI_USE_MOCK", "true") == "true"
 	c.GeminiAPIKey = getenv("GEMINI_API_KEY", "")
-	c.GeminiModel = getenv("GEMINI_MODEL", "gemini-1.5-flash")
+	c.GeminiModel = getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 	return c, nil
 }

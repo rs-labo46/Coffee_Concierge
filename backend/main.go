@@ -95,6 +95,16 @@ func main() {
 	sourceUC := usecase.NewSourceUsecase(sourceRepo, auditRepo, sourceVal)
 	beanUC := usecase.NewBeanUsecase(beanRepo, auditRepo, beanVal)
 	recipeUC := usecase.NewRecipeUsecase(recipeRepo, beanRepo, auditRepo, recipeVal)
+	geminiClient, err := gemini.NewClient(c)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if c.GeminiUseMock {
+		log.Println("[GEMINI] using mock client")
+	} else {
+		log.Println("[GEMINI] using real client model=", c.GeminiModel)
+	}
 
 	searchFlowUC := usecase.NewSearchFlowUsecase(
 		sessionRepo,
@@ -104,7 +114,7 @@ func main() {
 		auditRepo,
 		searchVal,
 		usecase.NewCoffeeRanker(),
-		gemini.NewClient(c),
+		geminiClient,
 		clock,
 		idGen,
 		24*time.Hour,

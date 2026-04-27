@@ -36,6 +36,8 @@ services:
     restart: always
     ports:
       - "18080:8080"
+    env_file:
+      - ./.env
     environment:
       PORT: "8080"
       GO_ENV: "dev"
@@ -53,6 +55,11 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       API_DOMAIN: ${API_DOMAIN}
       FE_URL: ${FE_URL}
+
+      GEMINI_USE_MOCK: ${GEMINI_USE_MOCK}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
+
     depends_on:
       db:
         condition: service_healthy
