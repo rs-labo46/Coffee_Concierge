@@ -39,7 +39,7 @@ func New(
 	public := e.Group("")
 	registerPublicAuthRoutes(public, authCtl, signupLimiter)
 	registerPublicContentRoutes(public, itemCtl, srcCtl, beanCtl, recipeCtl)
-	registerPublicSearchRoutes(public, searchCtl)
+	registerPublicSearchRoutes(public, searchCtl, jwtSecret, userRepo)
 
 	// CSRFとrefresh cookie前提のため、別groupで保護。
 	csrf := e.Group("")
@@ -120,10 +120,15 @@ func registerPublicContentRoutes(
 func registerPublicSearchRoutes(
 	g *echo.Group,
 	searchCtl *controller.SearchCtl,
+	jwtSecret string,
+	userRepo middleware.TokenVersionReader,
 ) {
+	g.Use(middleware.OptionalJWTAuth(jwtSecret))
+	g.Use(middleware.OptionalTokenVersion(userRepo))
+
 	g.POST("/search/sessions", searchCtl.StartSession)
-	g.POST("/search/sessions/:id/pref", middleware.SessionKeyHeaderRequired()(searchCtl.SetPref))
-	g.PATCH("/search/sessions/:id/pref", middleware.SessionKeyHeaderRequired()(searchCtl.PatchPref))
+	g.POST("/search/sessions/:id/pref", searchCtl.SetPref)
+	g.PATCH("/search/sessions/:id/pref", searchCtl.PatchPref)
 	g.GET("/search/guest/sessions/:id", middleware.SessionKeyHeaderRequired()(searchCtl.GetGuestSession))
 }
 

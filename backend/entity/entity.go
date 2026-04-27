@@ -307,11 +307,11 @@ type Suggestion struct {
 // 検索結果そのものと、ユーザーが保存したという行動。
 type SavedSuggestion struct {
 	ID           uint       `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	UserID       uint       `gorm:"column:user_id;not null;index" json:"user_id"`
+	UserID       uint       `gorm:"column:user_id;not null;index;uniqueIndex:idx_saved_suggestions_user_suggestion_unique" json:"user_id"`
 	User         User       `gorm:"foreignKey:UserID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 	SessionID    uint       `gorm:"column:session_id;not null;index" json:"session_id"`
 	Session      Session    `gorm:"foreignKey:SessionID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
-	SuggestionID uint       `gorm:"column:suggestion_id;not null;index" json:"suggestion_id"`
+	SuggestionID uint       `gorm:"column:suggestion_id;not null;index;uniqueIndex:idx_saved_suggestions_user_suggestion_unique" json:"suggestion_id"`
 	Suggestion   Suggestion `gorm:"foreignKey:SuggestionID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"suggestion"`
 	CreatedAt    time.Time  `gorm:"column:created_at;not null;autoCreateTime" json:"created_at"`
 }

@@ -255,7 +255,7 @@ func Migrate(d DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_suggestions_session_id_rank ON suggestions (session_id, rank);`,
 
 		`CREATE INDEX IF NOT EXISTS idx_saved_suggestions_user_id_created_at ON saved_suggestions (user_id, created_at DESC);`,
-
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_suggestions_user_suggestion_unique ON saved_suggestions (user_id, suggestion_id);`,
 		`CREATE INDEX IF NOT EXISTS gin_items_title_trgm ON items USING gin (title gin_trgm_ops);`,
 		`CREATE INDEX IF NOT EXISTS gin_items_summary_trgm ON items USING gin (summary gin_trgm_ops);`,
 	}

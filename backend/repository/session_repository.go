@@ -118,10 +118,16 @@ func (r *sessionRepository) CreateSession(session *entity.Session) error {
 		return apperr.ErrInvalidState
 	}
 
-	// レコードをINSERT。
-	err := r.db.Create(session).Error
+	var err error
+
+	if session.UserID != nil && *session.UserID > 0 {
+		err = r.db.Omit("SessionKeyHash", "GuestExpiresAt").Create(session).Error
+	} else {
+		err = r.db.Create(session).Error
+	}
+
 	if err != nil {
-		// unique / FK 制約違反はconflict。
+		//unique / FK 制約違反はconflict。
 		if isDup(err) || isFK(err) {
 			return apperr.ErrConflict
 		}
