@@ -201,7 +201,7 @@ export function MePage() {
   const roleTone =
     user.role === "admin"
       ? "bg-[#f1e3d6] text-[#7b523a]"
-      : "bg-[#ece6ff] text-[#6a55aa]";
+      : "bg-[#f4ebe3] text-[#7b523a]";
 
   return (
     <main className="min-h-[calc(100vh-120px)] bg-[#f6f1eb] px-4 py-8 md:px-8 md:py-10">

@@ -72,23 +72,23 @@ function HeadlineRow({
     <button
       type="button"
       onClick={() => onOpen(item.id)}
-      className="flex w-full items-start gap-3 border-b border-[#d8e1ef] px-1 py-3 text-left transition hover:bg-[#f6f9fe]"
+      className="flex w-full items-start gap-3 border-b border-[#eadfd4] px-1 py-3 text-left transition hover:bg-[#fffaf5]"
     >
-      <span className="mt-[10px] h-2.5 w-2.5 shrink-0 rounded-full bg-[#204b9b]" />
+      <span className="mt-[10px] h-2.5 w-2.5 shrink-0 rounded-full bg-[#7b523a]" />
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="line-clamp-1 text-[18px] font-bold leading-8 text-[#16326e]">
+          <h3 className="line-clamp-1 text-[18px] font-bold leading-8 text-[#4e342e]">
             {item.title}
           </h3>
           {isFreshItem(item.published_at) ? (
-            <span className="rounded-full bg-[#ffb400] px-2 py-0.5 text-[11px] font-black text-white">
+            <span className="rounded-full bg-[#b08968] px-2 py-0.5 text-[11px] font-black text-white">
               NEW
             </span>
           ) : null}
         </div>
 
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-[#6b7ea6]">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-[#8a756a]">
           <span>{formatDisplayDateTime(item.published_at)}</span>
           <span>{sourceName}</span>
           <span>{kindBadgeLabel(item.kind)}</span>
@@ -133,16 +133,16 @@ function DetailModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#12284a]/45 px-4 py-6">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#4e342e]/45 px-4 py-6">
       <div className="absolute inset-0" onClick={onClose} />
 
-      <div className="relative z-10 max-h-[90vh] w-full max-w-[840px] overflow-hidden rounded-[20px] border border-[#b8c8e2] bg-white shadow-[0_20px_48px_rgba(18,40,74,0.25)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[#d7e0ef] bg-[#f4f7fc] px-5 py-4">
+      <div className="relative z-10 max-h-[90vh] w-full max-w-[840px] overflow-hidden rounded-[20px] border border-[#eadfd4] bg-white shadow-[0_20px_48px_rgba(110,78,56,0.25)]">
+        <div className="flex items-start justify-between gap-4 border-b border-[#eadfd4] bg-[#fcf6f0] px-5 py-4">
           <div>
-            <p className="text-sm font-black tracking-[0.24em] text-[#4668ad] uppercase">
+            <p className="text-sm font-black tracking-[0.24em] text-[#a1775b] uppercase">
               preview
             </p>
-            <h2 className="mt-1 text-2xl font-black text-[#16326e]">
+            <h2 className="mt-1 text-2xl font-black text-[#4e342e]">
               記事プレビュー
             </h2>
           </div>
@@ -150,7 +150,7 @@ function DetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#c7d5eb] text-xl font-black text-[#2a4fa3] transition hover:bg-white"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#d8c5b8] text-xl font-black text-[#7b523a] transition hover:bg-white"
           >
             ×
           </button>
@@ -158,7 +158,7 @@ function DetailModal({
 
         <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-5 py-5 md:px-6 md:py-6">
           {loading ? (
-            <div className="rounded-[16px] border border-[#d7e0ef] bg-[#f7faff] px-5 py-10 text-center text-base font-bold text-[#355184]">
+            <div className="rounded-[16px] border border-[#eadfd4] bg-[#fffaf5] px-5 py-10 text-center text-base font-bold text-[#5f4a40]">
               読み込み中です...
             </div>
           ) : msg ? (
@@ -170,35 +170,35 @@ function DetailModal({
               <img
                 src={cardImage(item.image_url)}
                 alt={item.title}
-                className="h-[240px] w-full rounded-[16px] border border-[#d7e0ef] object-cover"
+                className="h-[240px] w-full rounded-[16px] border border-[#eadfd4] object-cover"
               />
 
-              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#6b7ea6]">
-                <span className="rounded-full border border-[#a9bbdc] bg-[#eef3fb] px-3 py-1 font-black tracking-[0.2em] text-[#2a4fa3]">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-[#8a756a]">
+                <span className="rounded-full border border-[#d8c5b8] bg-[#f4ebe3] px-3 py-1 font-black tracking-[0.2em] text-[#7b523a]">
                   {kindBadgeLabel(item.kind)}
                 </span>
                 <span>{formatDisplayDateTime(item.published_at)}</span>
                 <span>{source?.name || "未設定"}</span>
               </div>
 
-              <h3 className="text-2xl font-black leading-tight text-[#16326e]">
+              <h3 className="text-2xl font-black leading-tight text-[#4e342e]">
                 {item.title}
               </h3>
 
               {item.summary ? (
-                <p className="rounded-[16px] border border-[#d7e0ef] bg-[#f7faff] px-4 py-4 text-sm font-semibold leading-7 text-[#30466d]">
+                <p className="rounded-[16px] border border-[#eadfd4] bg-[#fffaf5] px-4 py-4 text-sm font-semibold leading-7 text-[#5f4a40]">
                   {item.summary}
                 </p>
               ) : null}
 
-              <p className="text-base font-medium leading-8 text-[#30466d]">
+              <p className="text-base font-medium leading-8 text-[#5f4a40]">
                 {halfPreviewText(item)}
               </p>
 
               <div className="flex flex-wrap justify-center gap-3">
                 <Link
                   to={`/items/${item.id}`}
-                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#2a4fa3] px-5 py-2 text-sm font-bold text-white transition hover:opacity-90"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#7b523a] px-5 py-2 text-sm font-bold text-white transition hover:opacity-90"
                 >
                   もっと見る
                 </Link>
@@ -300,8 +300,8 @@ export default function TopPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#eef2f8] px-4 py-8 md:px-8 md:py-10">
-        <div className="mx-auto max-w-[1280px] rounded-[20px] border border-[#9eb3d6] bg-white px-8 py-16 text-center text-lg font-bold text-[#355184] shadow-[0_8px_24px_rgba(27,52,120,0.08)]">
+      <main className="min-h-screen bg-[#f6f1eb] px-4 py-8 md:px-8 md:py-10">
+        <div className="mx-auto max-w-[1280px] rounded-[20px] border border-[#eadfd4] bg-white px-8 py-16 text-center text-lg font-bold text-[#5f4a40] shadow-[0_8px_24px_rgba(110,78,56,0.08)]">
           読み込み中です...
         </div>
       </main>
@@ -310,8 +310,8 @@ export default function TopPage() {
 
   if (msg) {
     return (
-      <main className="min-h-screen bg-[#eef2f8] px-4 py-8 md:px-8 md:py-10">
-        <div className="mx-auto max-w-[1280px] rounded-[20px] border border-[#9eb3d6] bg-white px-8 py-16 text-center text-lg font-bold text-[#8a4b3a] shadow-[0_8px_24px_rgba(27,52,120,0.08)]">
+      <main className="min-h-screen bg-[#f6f1eb] px-4 py-8 md:px-8 md:py-10">
+        <div className="mx-auto max-w-[1280px] rounded-[20px] border border-[#eadfd4] bg-white px-8 py-16 text-center text-lg font-bold text-[#8a4b3a] shadow-[0_8px_24px_rgba(110,78,56,0.08)]">
           {msg}
         </div>
       </main>
@@ -320,10 +320,10 @@ export default function TopPage() {
 
   return (
     <>
-      <main className="min-h-screen bg-[#eef2f8] px-3 py-6 md:px-8 md:py-10">
+      <main className="min-h-screen bg-[#f6f1eb] px-3 py-6 md:px-8 md:py-10">
         <div className="mx-auto max-w-[1280px]">
-          <section className="overflow-hidden rounded-[18px] border border-[#91a7d0] bg-white shadow-[0_10px_28px_rgba(27,52,120,0.08)]">
-            <div className="border-b border-[#b8c8e2] bg-[#f0f4fb] px-3 py-3 md:px-5">
+          <section className="overflow-hidden rounded-[18px] border border-[#eadfd4] bg-white shadow-[0_10px_28px_rgba(110,78,56,0.08)]">
+            <div className="border-b border-[#eadfd4] bg-[#fffaf5] px-3 py-3 md:px-5">
               <div className="flex flex-wrap items-center gap-1 md:gap-2">
                 {kindTabs.map((tab) => (
                   <button
@@ -333,8 +333,8 @@ export default function TopPage() {
                     className={[
                       "rounded-t-md border border-b-0 px-4 py-3 text-lg font-bold transition md:px-6",
                       activeKind === tab.kind
-                        ? "border-[#91a7d0] bg-white text-[#16326e]"
-                        : "border-transparent bg-transparent text-[#2a4fa3] hover:bg-[#e7eef9]",
+                        ? "border-[#eadfd4] bg-white text-[#4e342e]"
+                        : "border-transparent bg-transparent text-[#7b523a] hover:bg-[#f8efe7]",
                     ].join(" ")}
                   >
                     {tab.label}
@@ -344,9 +344,9 @@ export default function TopPage() {
             </div>
 
             <div className="px-4 py-5 md:px-6 md:py-6">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-[#5b6f98]">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-[#7a6b62]">
                 <div>
-                  <p className="text-sm font-black tracking-[0.22em] text-[#4668ad] uppercase">
+                  <p className="text-sm font-black tracking-[0.22em] text-[#a1775b] uppercase">
                     topics update
                   </p>
                   <p className="mt-1 text-[15px] font-semibold">
@@ -356,16 +356,16 @@ export default function TopPage() {
                   </p>
                 </div>
 
-                <div className="text-sm font-semibold text-[#7084ad]">
+                <div className="text-sm font-semibold text-[#8a756a]">
                   {kindDescLabel(activeKind)}
                 </div>
               </div>
 
               <div className="grid gap-6 lg:grid-cols-[1.55fr_0.75fr]">
                 <section>
-                  <div className="rounded-[12px] border border-[#d7e0ef] bg-white px-4 py-2">
+                  <div className="rounded-[12px] border border-[#eadfd4] bg-white px-4 py-2">
                     {subItems.length === 0 ? (
-                      <div className="px-1 py-10 text-center text-base font-bold text-[#526482]">
+                      <div className="px-1 py-10 text-center text-base font-bold text-[#7a6b62]">
                         このカテゴリのデータはまだありません。
                       </div>
                     ) : (
@@ -380,7 +380,7 @@ export default function TopPage() {
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-6 px-1 pt-4 text-[18px] font-bold text-[#2a4fa3]">
+                  <div className="flex flex-wrap gap-6 px-1 pt-4 text-[18px] font-bold text-[#7b523a]">
                     <Link
                       to={`/items?kind=${activeKind}`}
                       className="hover:underline"
@@ -395,9 +395,9 @@ export default function TopPage() {
                     <button
                       type="button"
                       onClick={() => openModal(featured.id)}
-                      className="flex w-full flex-col rounded-[12px] border border-[#d7e0ef] bg-white text-left shadow-[0_8px_20px_rgba(27,52,120,0.06)] transition hover:-translate-y-0.5"
+                      className="flex w-full flex-col rounded-[12px] border border-[#eadfd4] bg-white text-left shadow-[0_8px_20px_rgba(110,78,56,0.06)] transition hover:-translate-y-0.5"
                     >
-                      <div className="overflow-hidden border-b border-[#d7e0ef] bg-[#eef3fb]">
+                      <div className="overflow-hidden border-b border-[#eadfd4] bg-[#f4ebe3]">
                         <img
                           src={cardImage(featured.image_url)}
                           alt={featured.title}
@@ -406,19 +406,19 @@ export default function TopPage() {
                       </div>
 
                       <div className="px-4 py-4">
-                        <span className="rounded-full border border-[#a9bbdc] bg-[#eef3fb] px-3 py-1 text-[11px] font-black tracking-[0.2em] text-[#2a4fa3]">
+                        <span className="rounded-full border border-[#d8c5b8] bg-[#f4ebe3] px-3 py-1 text-[11px] font-black tracking-[0.2em] text-[#7b523a]">
                           {kindBadgeLabel(featured.kind)}
                         </span>
 
-                        <h2 className="mt-3 text-[34px] font-black leading-tight text-[#16326e] lg:text-[26px]">
+                        <h2 className="mt-3 text-[34px] font-black leading-tight text-[#4e342e] lg:text-[26px]">
                           {featured.title}
                         </h2>
 
-                        <p className="mt-3 text-sm font-medium leading-7 text-[#4d5c7c]">
+                        <p className="mt-3 text-sm font-medium leading-7 text-[#6f625b]">
                           {previewText(featured, 120)}
                         </p>
 
-                        <div className="mt-4 space-y-1 text-sm font-semibold text-[#6b7ea6]">
+                        <div className="mt-4 space-y-1 text-sm font-semibold text-[#8a756a]">
                           <p>{formatDisplayDateTime(featured.published_at)}</p>
                           <p>{sourceNameById(sources, featured.source_id)}</p>
                         </div>
