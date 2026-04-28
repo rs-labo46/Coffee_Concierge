@@ -273,15 +273,20 @@ func (r *itemRepository) SearchRelated(
 		limit = 3
 	}
 
-	// 候補語を作る。
-	// 空文字は除外し、重複も避ける。
-	terms := uniqueNonEmpty(
+	// Bean名や英語enumだけでは日本語seedのitemsに当たりにくいため、
+	// roast / mood / method から日本語の関連語も追加する。
+	rawTerms := []string{
 		beanName,
 		string(roast),
 		origin,
 		string(mood),
 		string(method),
-	)
+	}
+	rawTerms = append(rawTerms, roastRelatedTerms(roast)...)
+	rawTerms = append(rawTerms, moodRelatedTerms(mood)...)
+	rawTerms = append(rawTerms, methodRelatedTerms(method)...)
+
+	terms := uniqueNonEmpty(rawTerms...)
 
 	var items []entity.Item
 
@@ -291,25 +296,19 @@ func (r *itemRepository) SearchRelated(
 		Preload("Source").
 		Where("published_at <= ?", now)
 
-	// 検索語が1つもない場合は、公開中Itemをkindの優先順で返す。
+	// 検索語がある場合だけ、title / summary の部分一致条件を追加する。
+	// OR条件は1つのWHERE句にまとめ、published_at条件との優先順位崩れを避ける。
 	if len(terms) > 0 {
-		// 最初の検索語でベース条件を作る。
-		firstLike := "%" + terms[0] + "%"
-		tx = tx.Where(
-			"(title ILIKE ? OR summary ILIKE ?)",
-			firstLike,
-			firstLike,
-		)
+		conds := make([]string, 0, len(terms))
+		args := make([]interface{}, 0, len(terms)*2)
 
-		// 2語目以降は OR 条件を順に追加する。
-		for _, term := range terms[1:] {
+		for _, term := range terms {
 			like := "%" + term + "%"
-			tx = tx.Or(
-				"(title ILIKE ? OR summary ILIKE ?)",
-				like,
-				like,
-			)
+			conds = append(conds, "(title ILIKE ? OR summary ILIKE ?)")
+			args = append(args, like, like)
 		}
+
+		tx = tx.Where("("+strings.Join(conds, " OR ")+")", args...)
 	}
 
 	// kindの優先順をCASE式で表現する。
@@ -323,6 +322,162 @@ func (r *itemRepository) SearchRelated(
 		END
 	`
 	err := tx.
+		Order(kindOrder).
+		Order("published_at DESC").
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&items).
+		Error
+	if err != nil {
+		return nil, apperr.ErrInternal
+	}
+
+	// 関連語で1件も当たらない場合でも、公開中Itemを返して既存SPAへの回遊導線を残す。
+	if len(items) == 0 {
+		return fallbackRelatedItems(r.db, limit, now)
+	}
+
+	return items, nil
+}
+
+// 焙煎度を日本語の関連語へ変換する。
+// items.title / items.summary が日本語seed中心のため、英語enumだけでは検索に当たりにくい。
+func roastRelatedTerms(roast entity.Roast) []string {
+	switch roast {
+	case entity.RoastLight:
+		return []string{
+			"浅煎り",
+			"フローラル",
+			"果実感",
+			"透明感",
+			"エチオピア",
+			"柑橘",
+		}
+	case entity.RoastMedium:
+		return []string{
+			"中煎り",
+			"バランス",
+			"家庭向け",
+			"甘さ",
+			"基本比率",
+			"飲みやすい",
+		}
+	case entity.RoastDark:
+		return []string{
+			"深煎り",
+			"苦味",
+			"濃い",
+			"牛乳",
+			"ラテ",
+			"厚み",
+		}
+	default:
+		return nil
+	}
+}
+
+// 気分を日本語の関連語へ変換する。
+// mood enumだけでは日本語記事に当たりにくいため、記事タイトルに出やすい語へ広げる。
+func moodRelatedTerms(mood entity.Mood) []string {
+	switch mood {
+	case entity.MoodMorning:
+		return []string{
+			"朝",
+			"朝の一杯",
+			"時短",
+			"朝食",
+			"出勤前",
+		}
+	case entity.MoodWork:
+		return []string{
+			"作業",
+			"集中",
+			"デスクワーク",
+			"長時間",
+			"仕事",
+		}
+	case entity.MoodRelax:
+		return []string{
+			"休日",
+			"週末",
+			"ゆっくり",
+			"香り",
+			"リラックス",
+		}
+	case entity.MoodNight:
+		return []string{
+			"夜",
+			"深夜",
+			"食後",
+			"落ち着き",
+		}
+	default:
+		return nil
+	}
+}
+
+// 抽出方法を日本語の関連語へ変換する。
+// method enumだけでは日本語記事に当たりにくいため、記事タイトルに出やすい語へ広げる。
+func methodRelatedTerms(method entity.Method) []string {
+	switch method {
+	case entity.MethodDrip:
+		return []string{
+			"ドリップ",
+			"ハンドドリップ",
+			"ペーパー",
+			"抽出",
+		}
+	case entity.MethodEspresso:
+		return []string{
+			"エスプレッソ",
+			"濃縮",
+			"ラテ",
+		}
+	case entity.MethodMilk:
+		return []string{
+			"ミルク",
+			"牛乳",
+			"ラテ",
+			"オレ",
+		}
+	case entity.MethodIced:
+		return []string{
+			"アイス",
+			"冷たい",
+			"氷",
+			"夏",
+		}
+	default:
+		return nil
+	}
+}
+
+// 関連語検索で0件だった場合の保険として、公開中Itemをkind優先順で返す。
+// これにより、コンシェルジュ画面で関連情報導線が完全に空になることを避ける。
+func fallbackRelatedItems(db *gorm.DB, limit int, now time.Time) ([]entity.Item, error) {
+	if limit <= 0 {
+		limit = 3
+	}
+	if limit > 3 {
+		limit = 3
+	}
+
+	var items []entity.Item
+
+	kindOrder := `
+		CASE kind
+			WHEN 'recipe' THEN 1
+			WHEN 'shop' THEN 2
+			WHEN 'news' THEN 3
+			WHEN 'deal' THEN 4
+			ELSE 5
+		END
+	`
+
+	err := db.
+		Model(&entity.Item{}).
+		Preload("Source").
+		Where("published_at <= ?", now).
 		Order(kindOrder).
 		Order("published_at DESC").
 		Order("created_at DESC").

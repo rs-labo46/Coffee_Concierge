@@ -221,7 +221,7 @@ export function toErrorMessage(err: unknown, fallback: string): string {
     }
 
     if (err.status === 403) {
-      return "管理者権限が必要です。";
+      return "この操作を行う権限がありません。ログイン状態や対象データを確認してください。";
     }
 
     const msg = err.message.trim();

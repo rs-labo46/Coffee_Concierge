@@ -67,6 +67,11 @@ type ReasonCandidate struct {
 	BeanName     string
 	Roast        string
 	Origin       string
+	Flavor       int
+	Acidity      int
+	Bitterness   int
+	Body         int
+	Aroma        int
 	RecipeName   string
 	Method       string
 	ItemTitles   []string

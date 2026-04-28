@@ -28,7 +28,7 @@ Rules:
 - note must be written in Japanese if present.
 - Omit keys you are not confident about.
 - Interpret common Japanese coffee preference expressions as condition hints.
-- If the user asks for "苦め", "苦い", "ビター", "苦味強め", "苦味しっかり", "しっかり苦味", "苦味が欲しい", "苦味のある", "苦味を感じる", "パンチがある", "キリッと苦い", "深煎りっぽい苦さ", "大人っぽい苦味", or "甘くない苦味", set bitterness to 5.
+- If the user asks for "苦め","ブラック", "苦い", "ビター", "苦味強め", "苦味しっかり", "しっかり苦味", "苦味が欲しい", "苦味のある", "苦味を感じる", "パンチがある", "キリッと苦い", "深煎りっぽい苦さ", "大人っぽい苦味", or "甘くない苦味", set bitterness to 5.
 - If the user asks for "少し苦め", "やや苦め", "ほんのり苦い", "苦味も少し欲しい", or "苦味は中くらい", set bitterness to 4.
 - If the user asks for "苦味控えめ", "苦味弱め", "苦くない", "苦味少なめ", "苦味は少なく", "苦味を抑えたい", "苦すぎない", "苦いのは苦手", "苦味が苦手", "まろやか", "やさしい苦味", or "飲みやすい苦味", set bitterness to 1 or 2.
 - If the user asks for "酸味強め", "酸っぱい", "明るい酸味", "フルーティーな酸味", "爽やかな酸味", "華やかな酸味", "柑橘っぽい", "ベリーっぽい", "果実感", "フルーティー", or "明るい味", set acidity to 5.
@@ -132,6 +132,9 @@ func buildConditionDiffPrompt(in usecase.ParseConditionDiffIn) string {
 func buildReasonsPrompt(in usecase.BuildReasonsIn) string {
 	var b strings.Builder
 	b.WriteString("Output language: Japanese only. Return JSON only.\n")
+	b.WriteString("Each reason must be one complete Japanese sentence ending with です。 or ます。\n")
+	b.WriteString("Explain why the displayed bean matches the current pref, using only the values in the same candidate line.\n")
+	b.WriteString("Do not describe another bean. Do not invent facts not present in the candidate line.\n")
 	b.WriteString("Current pref:\n")
 	b.WriteString(fmt.Sprintf(
 		`{"flavor":%d,"acidity":%d,"bitterness":%d,"body":%d,"aroma":%d,"mood":"%s","method":"%s","scene":"%s","temp_pref":"%s"}`+"\n",
@@ -154,11 +157,16 @@ func buildReasonsPrompt(in usecase.BuildReasonsIn) string {
 	b.WriteString("Candidates:\n")
 	for _, c := range in.Candidates {
 		b.WriteString(fmt.Sprintf(
-			`- suggestion_id=%d bean="%s" roast="%s" origin="%s" recipe="%s" method="%s" items="%s"`+"\n",
+			`- suggestion_id=%d bean="%s" roast="%s" origin="%s" flavor=%d acidity=%d bitterness=%d body=%d aroma=%d recipe="%s" method="%s" items="%s"`+"\n",
 			c.SuggestionID,
 			c.BeanName,
 			c.Roast,
 			c.Origin,
+			c.Flavor,
+			c.Acidity,
+			c.Bitterness,
+			c.Body,
+			c.Aroma,
 			c.RecipeName,
 			c.Method,
 			strings.Join(c.ItemTitles, ", "),

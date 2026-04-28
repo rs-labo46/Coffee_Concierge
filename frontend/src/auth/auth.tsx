@@ -76,7 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<void> {
     await api<void>("/auth/password/reset", {
       method: "POST",
-      body: { token, new_password: newPassword },
+      body: {
+        token,
+        password: newPassword,
+      },
     });
   }
 

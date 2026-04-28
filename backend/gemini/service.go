@@ -111,10 +111,21 @@ func (s *Service) BuildReasons(
 		beanName := ""
 		roast := ""
 		origin := ""
+		flavor := 0
+		acidity := 0
+		bitterness := 0
+		body := 0
+		aroma := 0
+
 		if bean != nil {
 			beanName = bean.Name
 			roast = string(bean.Roast)
 			origin = bean.Origin
+			flavor = bean.Flavor
+			acidity = bean.Acidity
+			bitterness = bean.Bitterness
+			body = bean.Body
+			aroma = bean.Aroma
 		}
 
 		recipeName := ""
@@ -125,10 +136,15 @@ func (s *Service) BuildReasons(
 		}
 
 		candidates = append(candidates, usecase.ReasonCandidate{
-			SuggestionID: sug.ID,
+			SuggestionID: uint(sug.Rank),
 			BeanName:     beanName,
 			Roast:        roast,
 			Origin:       origin,
+			Flavor:       flavor,
+			Acidity:      acidity,
+			Bitterness:   bitterness,
+			Body:         body,
+			Aroma:        aroma,
 			RecipeName:   recipeName,
 			Method:       method,
 			ItemTitles:   itemTitles,
@@ -162,8 +178,8 @@ func (s *Service) BuildReasons(
 		if strings.TrimSpace(r.Reason) == "" {
 			continue
 		}
-		rank := findSuggestionRankByID(in.Suggestions, r.SuggestionID)
-		if rank == 0 {
+		rank := int(r.SuggestionID)
+		if !hasSuggestionRank(in.Suggestions, rank) {
 			continue
 		}
 		results = append(results, usecase.GeminiReason{
@@ -487,4 +503,18 @@ var questionListSchema = json.RawMessage(`{
 // 監査用にprovider/modelを返す。
 func (s *Service) Info() (string, string) {
 	return "gemini", s.model
+}
+
+func hasSuggestionRank(suggestions []entity.Suggestion, rank int) bool {
+	if rank <= 0 {
+		return false
+	}
+
+	for _, s := range suggestions {
+		if s.Rank == rank {
+			return true
+		}
+	}
+
+	return false
 }

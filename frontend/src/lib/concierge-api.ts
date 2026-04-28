@@ -2,19 +2,31 @@ import { ApiError, api, getToken } from "./api";
 import type {
   PatchPrefInput,
   PatchPrefResponse,
+  Pref,
   SavedSuggestion,
   SaveSuggestionInput,
   SaveSuggestionResponse,
+  SearchSession,
   SetPrefInput,
   SetPrefResponse,
   StartSessionResponse,
+  Suggestion,
+  Turn,
 } from "./concierge";
 
 type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
 type SavedSuggestionListResponse = {
   saved: SavedSuggestion[];
 };
-type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+export type GuestSessionDetail = {
+  session: SearchSession;
+  turns: Turn[];
+  pref: Pref;
+  suggestions: Suggestion[];
+};
 
 function need<T>(value: T | undefined): T {
   if (value === undefined) {
@@ -146,6 +158,31 @@ export async function patchSearchPref(
   return need(res);
 }
 
+export async function getGuestSearchSession(
+  sessionID: number,
+  sessionKey: string,
+): Promise<GuestSessionDetail> {
+  const key = sessionKey.trim();
+
+  if (sessionID <= 0 || key === "") {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "guest session id and session key are required",
+    );
+  }
+
+  const res = await api<GuestSessionDetail>(
+    `/search/guest/sessions/${sessionID}`,
+    {
+      method: "GET",
+      headers: { "X-Session-Key": key },
+    },
+  );
+
+  return need(res);
+}
+
 export async function saveSuggestion(
   input: SaveSuggestionInput,
 ): Promise<SaveSuggestionResponse> {
@@ -159,6 +196,19 @@ export async function saveSuggestion(
   });
 
   return need(res);
+}
+
+export async function deleteSavedSuggestion(
+  suggestionID: number,
+): Promise<void> {
+  if (suggestionID <= 0) {
+    throw new ApiError(400, "invalid_request", "suggestion_id is invalid");
+  }
+
+  await api<void>(`/saved-suggestions/${suggestionID}`, {
+    method: "DELETE",
+    auth: true,
+  });
 }
 
 export async function listSavedSuggestions(input?: {
