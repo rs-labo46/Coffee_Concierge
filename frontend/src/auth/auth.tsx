@@ -137,13 +137,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function logout(): Promise<void> {
+  async function logout() {
     try {
-      await api<void>("/auth/logout", {
+      await api("/auth/logout", {
         method: "POST",
         auth: true,
         csrf: true,
       });
+    } catch (err: unknown) {
+      if (!(err instanceof ApiError && err.status === 401)) {
+        throw err;
+      }
     } finally {
       clearToken();
       setUser(null);

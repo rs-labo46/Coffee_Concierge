@@ -7,6 +7,7 @@ type ApiOption = {
   body?: Json;
   auth?: boolean;
   csrf?: boolean;
+  headers?: Record<string, string>;
 };
 
 type ApiErrBody = {
@@ -78,6 +79,13 @@ function buildHeaders(opt?: ApiOption): Headers {
     const csrf = getCookie("csrf_token");
     if (csrf) {
       headers.set("X-CSRF-Token", csrf);
+    }
+  }
+  if (opt?.headers) {
+    for (const [key, value] of Object.entries(opt.headers)) {
+      if (value.trim() !== "") {
+        headers.set(key, value);
+      }
     }
   }
 

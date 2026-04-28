@@ -25,6 +25,7 @@ Rules:
 - temp_pref is one of: hot, ice.
 - excludes is an array of strings.
 - note is a short string.
+- note must be written in Japanese if present.
 - Omit keys you are not confident about.
 `
 
@@ -35,6 +36,12 @@ Return JSON only.
 Each candidate must have:
 - suggestion_id
 - reason
+
+Language rules:
+- Write every reason in Japanese.
+- Do not use English unless it is a proper noun already provided, such as a bean name, origin, recipe name, or method value.
+- Keep the Japanese natural, concise, and suitable for a consumer coffee app.
+- Each reason must be a complete Japanese sentence ending with "です。" or "ます。".
 
 Rules:
 - Reason must be grounded only in the provided candidate summary, pref, and recent turns.
@@ -47,8 +54,15 @@ const followupSystemInstruction = `
 You generate follow-up questions for a coffee search flow.
 Return JSON only.
 Output only the next questions needed to narrow the search.
-Do not ask broad or unrelated questions.
-Keep questions short.
+
+Language rules:
+- Write every question in Japanese.
+- Do not use English unless it is a proper noun already provided.
+- Use short, natural Japanese suitable for a consumer coffee app.
+
+Rules:
+- Do not ask broad or unrelated questions.
+- Keep questions short.
 `
 
 // 条件差分生成用のuser prompt。
@@ -84,7 +98,7 @@ func buildConditionDiffPrompt(in usecase.ParseConditionDiffIn) string {
 // 理由文生成用のuser prompt。
 func buildReasonsPrompt(in usecase.BuildReasonsIn) string {
 	var b strings.Builder
-
+	b.WriteString("Output language: Japanese only. Return JSON only.\n")
 	b.WriteString("Current pref:\n")
 	b.WriteString(fmt.Sprintf(
 		`{"flavor":%d,"acidity":%d,"bitterness":%d,"body":%d,"aroma":%d,"mood":"%s","method":"%s","scene":"%s","temp_pref":"%s"}`+"\n",
@@ -124,7 +138,7 @@ func buildReasonsPrompt(in usecase.BuildReasonsIn) string {
 // 追加質問生成用のuser prompt。
 func buildFollowupPrompt(in usecase.BuildQuestionsIn) string {
 	var b strings.Builder
-
+	b.WriteString("Output language: Japanese only. Return JSON only.\n")
 	b.WriteString("Current pref:\n")
 	b.WriteString(fmt.Sprintf(
 		`{"flavor":%d,"acidity":%d,"bitterness":%d,"body":%d,"aroma":%d,"mood":"%s","method":"%s","scene":"%s","temp_pref":"%s"}`+"\n",

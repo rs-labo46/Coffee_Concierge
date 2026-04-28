@@ -3,6 +3,7 @@ package entity
 import (
 	"time"
 
+	"github.com/lib/pq"
 	"gorm.io/datatypes"
 )
 
@@ -226,21 +227,21 @@ type Bean struct {
 // recipesテーブルに対応する抽出提案。
 // Beanに必ず紐づいて、method/temp_prefの一致に使う。
 type Recipe struct {
-	ID        uint      `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	BeanID    uint      `gorm:"column:bean_id;not null;index" json:"bean_id"`
-	Bean      Bean      `gorm:"foreignKey:BeanID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"bean"`
-	Name      string    `gorm:"column:name;type:text;not null" json:"name"`
-	Method    Method    `gorm:"column:method;type:text;not null;index" json:"method"`
-	TempPref  TempPref  `gorm:"column:temp_pref;type:text;not null" json:"temp_pref"`
-	Grind     string    `gorm:"column:grind;type:text;not null" json:"grind"`
-	Ratio     string    `gorm:"column:ratio;type:text;not null" json:"ratio"`
-	Temp      int       `gorm:"column:temp;not null" json:"temp"`
-	TimeSec   int       `gorm:"column:time_sec;not null" json:"time_sec"`
-	Steps     []string  `gorm:"column:steps;type:text[];not null" json:"steps"`
-	Desc      string    `gorm:"column:desc;type:text;not null" json:"desc"`
-	Active    bool      `gorm:"column:active;not null;default:true" json:"active"`
-	CreatedAt time.Time `gorm:"column:created_at;not null;autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at;not null;autoUpdateTime" json:"updated_at"`
+	ID        uint           `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	BeanID    uint           `gorm:"column:bean_id;not null;index" json:"bean_id"`
+	Bean      Bean           `gorm:"foreignKey:BeanID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"bean"`
+	Name      string         `gorm:"column:name;type:text;not null" json:"name"`
+	Method    Method         `gorm:"column:method;type:text;not null;index" json:"method"`
+	TempPref  TempPref       `gorm:"column:temp_pref;type:text;not null" json:"temp_pref"`
+	Grind     string         `gorm:"column:grind;type:text;not null" json:"grind"`
+	Ratio     string         `gorm:"column:ratio;type:text;not null" json:"ratio"`
+	Temp      int            `gorm:"column:temp;not null" json:"temp"`
+	TimeSec   int            `gorm:"column:time_sec;not null" json:"time_sec"`
+	Steps     pq.StringArray `gorm:"column:steps;type:text[];not null" json:"steps"`
+	Desc      string         `gorm:"column:desc;type:text;not null" json:"desc"`
+	Active    bool           `gorm:"column:active;not null;default:true" json:"active"`
+	CreatedAt time.Time      `gorm:"column:created_at;not null;autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"column:updated_at;not null;autoUpdateTime" json:"updated_at"`
 }
 
 // sessionsテーブルに対応する対話検索。

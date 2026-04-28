@@ -22,6 +22,7 @@ import { VerifyEmailPage } from "./pages/verify-email";
 import { ForgotPasswordPage } from "./pages/forgot-password";
 import { ItemDetailPage } from "./pages/item-detail";
 import { ResetPasswordPage } from "./pages/reset-password";
+import { ConciergePage } from "./pages/concierge";
 import { useAuth } from "./auth/use-auth";
 
 type GuardProps = {
@@ -93,8 +94,11 @@ function HeaderAuthActions() {
   const nav = useNavigate();
 
   async function onLogout() {
-    await logout();
-    nav("/login", { replace: true });
+    try {
+      await logout();
+    } finally {
+      nav("/login", { replace: true });
+    }
   }
 
   if (!user) {
@@ -183,12 +187,14 @@ function AppHeader() {
 
             <div className="flex w-full flex-col gap-3 lg:w-auto lg:items-end">
               <nav className="flex w-full flex-wrap items-center justify-center gap-2 lg:w-auto lg:justify-end">
+                <HeaderNavItem to="/concierge" label="コンシェルジュ" />
+
                 {user ? <HeaderNavItem to="/me" label="マイページ" /> : null}
                 {user?.role === "admin" ? (
                   <HeaderNavItem to="/admin" label="管理" />
                 ) : null}
               </nav>
-
+              ;
               <HeaderAuthActions />
             </div>
           </div>
@@ -226,6 +232,7 @@ function AppRoutes() {
           <Route path="/" element={<TopPage />} />
           <Route path="/items" element={<ItemsPage />} />
           <Route path="/items/:id" element={<ItemDetailPage />} />
+          <Route path="/concierge" element={<ConciergePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
