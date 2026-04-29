@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  ApiError,
   api,
+  ApiError,
   clearToken,
+  clearCSRFToken,
+  ensureCSRFToken,
   getCookie,
   getToken,
   setToken,
@@ -112,6 +114,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function refresh(): Promise<boolean> {
     try {
+      await ensureCSRFToken();
+
       const res = await api<RefreshResponse>("/auth/refresh", {
         method: "POST",
         csrf: true,
@@ -119,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!res) {
         clearToken();
+        clearCSRFToken();
         setUser(null);
         return false;
       }
@@ -128,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (err: unknown) {
       clearToken();
+      clearCSRFToken();
       setUser(null);
 
       if (err instanceof ApiError) {
@@ -142,6 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     try {
+      await ensureCSRFToken();
+
       await api("/auth/logout", {
         method: "POST",
         auth: true,
@@ -153,6 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       clearToken();
+      clearCSRFToken();
       setUser(null);
     }
   }

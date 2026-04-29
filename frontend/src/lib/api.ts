@@ -28,6 +28,7 @@ export class ApiError extends Error {
 }
 
 const tokenKey = "access_token";
+const csrfTokenKey = "csrf_token";
 
 function getBaseUrl(): string {
   return import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
@@ -42,7 +43,49 @@ function joinUrl(base: string, path: string): string {
 export function getToken(): string {
   return localStorage.getItem(tokenKey) || "";
 }
+type CsrfRes = {
+  token: string;
+};
 
+export function getCSRFToken(): string {
+  return localStorage.getItem(csrfTokenKey) || "";
+}
+
+export function setCSRFToken(token: string): void {
+  localStorage.setItem(csrfTokenKey, token);
+}
+
+export function clearCSRFToken(): void {
+  localStorage.removeItem(csrfTokenKey);
+}
+
+export async function ensureCSRFToken(): Promise<string> {
+  const current = getCSRFToken();
+  if (current) {
+    return current;
+  }
+
+  const res = await fetch(joinUrl(getBaseUrl(), "/auth/csrf"), {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      "csrf_failed",
+      "csrf token could not be issued",
+    );
+  }
+
+  const data = await readJsonSafe<CsrfRes>(res);
+  if (!data?.token) {
+    throw new ApiError(500, "invalid_response", "csrf response is invalid");
+  }
+
+  setCSRFToken(data.token);
+  return data.token;
+}
 export function setToken(token: string): void {
   localStorage.setItem(tokenKey, token);
 }
@@ -76,7 +119,7 @@ function buildHeaders(opt?: ApiOption): Headers {
   }
 
   if (opt?.csrf) {
-    const csrf = getCookie("csrf_token");
+    const csrf = getCSRFToken() || getCookie("csrf_token");
     if (csrf) {
       headers.set("X-CSRF-Token", csrf);
     }
@@ -120,11 +163,16 @@ type RefreshRes = {
 };
 
 async function tryRefresh(): Promise<boolean> {
-  const csrf = getCookie("csrf_token");
+  let csrf = getCSRFToken() || getCookie("csrf_token");
 
   if (!csrf) {
-    clearToken();
-    return false;
+    try {
+      csrf = await ensureCSRFToken();
+    } catch {
+      clearToken();
+      clearCSRFToken();
+      return false;
+    }
   }
 
   const res = await fetch(joinUrl(getBaseUrl(), "/auth/refresh"), {
