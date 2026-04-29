@@ -36,7 +36,7 @@ export function PasswordField({
         <button
           type="button"
           onClick={() => setShow((prev) => !prev)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-[#d9c6b8] bg-white px-3 py-1 text-xs font-bold text-[#7b523a] transition hover:bg-[#f7efe8]"
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-[#d9c6b8] bg-white px-3 py-1 text-xs font-bold text-[#7b523a] transition hover:bg-[#f7efe8] cursor-pointer"
         >
           {show ? "非表示" : "表示"}
         </button>

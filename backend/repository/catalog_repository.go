@@ -225,13 +225,13 @@ func (r *beanRepository) List(q BeanListQ) ([]entity.Bean, error) {
 		tx = tx.Where("active = ?", *q.Active)
 	}
 
-	// limitが未指定なら20、上限は100に固定。
+	// limitが未指定なら20、上限は1000に固定。
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 20
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > 1000 {
+		limit = 1000
 	}
 
 	// offsetはマイナスを許可しない。

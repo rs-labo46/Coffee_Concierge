@@ -60,20 +60,27 @@ Output shape:
 }
 
 Taste scale definitions:
-- flavor: overall sweetness, pleasant flavor impression, balance, and memorability. 1 is weak/plain, 5 is very expressive or sweet-impression rich.
-- acidity: bright sourness, citrus, berry, fruity sharpness. 1 is very low, 5 is very bright and acidic.
-- bitterness: bitter impression, roast bitterness, dark chocolate-like sharpness. 1 is very low, 5 is very bitter.
-- body: weight, thickness, richness, mouthfeel. 1 is light, 5 is heavy and rich.
-- aroma: fragrance intensity and aromatic impression. 1 is quiet, 5 is very aromatic.
+- flavor: overall sweetness, pleasant flavor impression, balance, and memorability. 1 is weak/plain, 3 is balanced/standard, 5 is very expressive or sweet-impression rich.
+- acidity: bright sourness, citrus, berry, and fruity sharpness. 1 is very low, 3 is moderate, 5 is very bright and acidic.
+- bitterness: bitter impression, roast bitterness, and dark chocolate-like sharpness. 1 is very low, 3 is moderate, 5 is very bitter.
+- body: weight, thickness, richness, and mouthfeel. 1 is very light, 3 is medium, 5 is heavy and rich.
+- aroma: fragrance intensity and aromatic impression. 1 is quiet, 3 is moderate, 5 is very aromatic.
 
 Selection rules:
-- Prioritize beans matching the user's current pref and latest input.
+- Select from the provided registered beans only.
+- Return exactly min(limit, number of provided candidates) selections whenever possible.
+- If all provided candidates are valid beans, include every candidate up to the limit.
+- Rank the candidates by how well they match the current pref and latest input.
 - Score must be 0..100.
 - Rank must start at 1 and be unique.
 - Reason must be Japanese and grounded only in the provided bean JSON and current pref.
 - Each reason must mention at least two concrete matching points from roast, origin, flavor, acidity, bitterness, body, aroma, method, mood, scene, or temp_pref.
 - Do not use vague reason text like 「今の条件に近い候補です」 by itself.
-- If there are fewer suitable beans than the limit, return fewer.
+- Do not reuse the same reason text across multiple selections.
+- Each reason must explain why that specific bean was selected compared with the other provided candidates.
+- Each reason must mention the bean name or a concrete attribute unique to that bean.
+- If multiple candidates have similar scores, still describe their differences using origin, roast, flavor, acidity, bitterness, body, aroma, drinking scene, temperature, or brewing method.
+- Avoid generic phrases that can apply to every candidate.
 
 Followup rules:
 - followup_questions must be Japanese.
@@ -98,18 +105,27 @@ Never invent a bean, recipe, article, URL, ID, origin, or score.
 Return up to the requested limit.
 
 Taste scale definitions:
-- flavor: overall sweetness, pleasant flavor impression, balance, and memorability. 1 is weak/plain, 5 is very expressive or sweet-impression rich.
-- acidity: bright sourness, citrus, berry, fruity sharpness. 1 is very low, 5 is very bright and acidic.
-- bitterness: bitter impression, roast bitterness, dark chocolate-like sharpness. 1 is very low, 5 is very bitter.
-- body: weight, thickness, richness, mouthfeel. 1 is light, 5 is heavy and rich.
-- aroma: fragrance intensity and aromatic impression. 1 is quiet, 5 is very aromatic.
+- flavor: overall sweetness, pleasant flavor impression, balance, and memorability. 1 is weak/plain, 3 is balanced/standard, 5 is very expressive or sweet-impression rich.
+- acidity: bright sourness, citrus, berry, and fruity sharpness. 1 is very low, 3 is moderate, 5 is very bright and acidic.
+- bitterness: bitter impression, roast bitterness, and dark chocolate-like sharpness. 1 is very low, 3 is moderate, 5 is very bitter.
+- body: weight, thickness, richness, and mouthfeel. 1 is very light, 3 is medium, 5 is heavy and rich.
+- aroma: fragrance intensity and aromatic impression. 1 is quiet, 3 is moderate, 5 is very aromatic.
 
 Selection rules:
-- Prioritize beans matching the user's current pref and latest input.
+- Select from the provided registered beans only.
+- Return exactly min(limit, number of provided candidates) selections whenever possible.
+- If all provided candidates are valid beans, include every candidate up to the limit.
+- Rank the candidates by how well they match the current pref and latest input.
 - Score must be 0..100.
 - Rank must start at 1 and be unique.
 - Reason must be Japanese and grounded only in the provided bean JSON and current pref.
-- If there are fewer suitable beans than the limit, return fewer.
+- Each reason must mention at least two concrete matching points from roast, origin, flavor, acidity, bitterness, body, aroma, method, mood, scene, or temp_pref.
+- Do not use vague reason text like 「今の条件に近い候補です」 by itself.
+- Do not reuse the same reason text across multiple selections.
+- Each reason must explain why that specific bean was selected compared with the other provided candidates.
+- Each reason must mention the bean name or a concrete attribute unique to that bean.
+- If multiple candidates have similar scores, still describe their differences using origin, roast, flavor, acidity, bitterness, body, aroma, drinking scene, temperature, or brewing method.
+- Avoid generic phrases that can apply to every candidate.
 `
 
 // 候補理由文生成用の固定ルール。

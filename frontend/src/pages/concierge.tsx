@@ -21,24 +21,14 @@ import {
   tempPrefLabel,
   type Bean,
   type ConciergeItem,
-  type Method,
-  type Mood,
   type PatchPrefInput,
   type Pref,
   type Recipe,
-  type Scene,
-  type Score,
   type SearchResult,
   type SearchSession,
   type SetPrefInput,
   type Suggestion,
-  type TempPref,
 } from "../lib/concierge";
-
-type SelectOption<T extends string | number> = {
-  value: T;
-  label: string;
-};
 
 type LocalTurn = {
   id: number;
@@ -123,56 +113,12 @@ function saveConciergeState(input: StoredConciergeState): void {
 function clearConciergeState(): void {
   sessionStorage.removeItem(conciergeStateKey);
 }
-const scoreOptions: SelectOption<Score>[] = [
-  { value: 1, label: "1 弱い" },
-  { value: 2, label: "2 やや弱い" },
-  { value: 3, label: "3 標準" },
-  { value: 4, label: "4 やや強い" },
-  { value: 5, label: "5 強い" },
-];
-
-const moodOptions: SelectOption<Mood>[] = [
-  { value: "morning", label: "朝" },
-  { value: "work", label: "仕事" },
-  { value: "relax", label: "リラックス" },
-  { value: "night", label: "夜" },
-];
-
-const methodOptions: SelectOption<Method>[] = [
-  { value: "drip", label: "ドリップ" },
-  { value: "espresso", label: "エスプレッソ" },
-  { value: "milk", label: "ミルク向け" },
-  { value: "iced", label: "アイス" },
-];
-
-const sceneOptions: SelectOption<Scene>[] = [
-  { value: "work", label: "作業中" },
-  { value: "break", label: "休憩" },
-  { value: "after_meal", label: "食後" },
-  { value: "relax", label: "くつろぎ" },
-];
-
-const tempOptions: SelectOption<TempPref>[] = [
-  { value: "hot", label: "ホット" },
-  { value: "ice", label: "アイス" },
-];
-
 const exampleTexts = [
   "朝に軽めで飲みたい",
   "酸味は弱めでミルクに合うもの",
   "食後に苦めでどっしりした一杯",
   "アイスで飲みやすいもの",
 ];
-
-function toScore(value: string): Score {
-  const n = Number(value);
-
-  if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) {
-    return n;
-  }
-
-  return 3;
-}
 
 function textToPatchInput(text: string): PatchPrefInput {
   const note = text.trim();
@@ -380,66 +326,6 @@ function FieldShell({
   );
 }
 
-function SelectField<T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: SelectOption<T>[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <FieldShell label={label}>
-      <select
-        value={value}
-        onChange={(event) => {
-          const raw = event.target.value;
-          const next = options.find((option) => String(option.value) === raw);
-          if (next) {
-            onChange(next.value);
-          }
-        }}
-        className="min-h-12 w-full rounded-2xl border border-[#dfcfc2] bg-white px-4 py-2 text-sm font-bold text-[#4e342e] outline-none transition focus:border-[#7b523a] focus:ring-4 focus:ring-[#eadfd5]"
-      >
-        {options.map((option) => (
-          <option key={String(option.value)} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </FieldShell>
-  );
-}
-
-function ScoreField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: Score;
-  onChange: (value: Score) => void;
-}) {
-  return (
-    <FieldShell label={label}>
-      <select
-        value={value}
-        onChange={(event) => onChange(toScore(event.target.value))}
-        className="min-h-12 w-full rounded-2xl border border-[#dfcfc2] bg-white px-4 py-2 text-sm font-bold text-[#4e342e] outline-none transition focus:border-[#7b523a] focus:ring-4 focus:ring-[#eadfd5]"
-      >
-        {scoreOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </FieldShell>
-  );
-}
-
 function AxisBadge({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-2xl border border-[#eadfd5] bg-[#fffaf5] px-3 py-2 text-center">
@@ -481,7 +367,7 @@ function SuggestionRow({
       onClick={() => onSelect(suggestion.id)}
       className={
         selected
-          ? "flex w-full items-start gap-4 border-b border-[#eadfd4] bg-[#fffaf5] px-3 py-4 text-left transition last:border-b-0"
+          ? "flex w-full items-start gap-4 border-b border-[#eadfd4] bg-[#fffaf5] px-3 py-4 text-left transition last:border-b-0 cursor-pointer"
           : "flex w-full items-start gap-4 border-b border-[#eadfd4] px-3 py-4 text-left transition last:border-b-0 hover:bg-[#fffaf5]"
       }
     >
@@ -577,7 +463,7 @@ function SuggestionCard({
               onClick={() => void onToggleSave(suggestion)}
               className={
                 saved
-                  ? "inline-flex min-h-11 items-center justify-center rounded-full border border-[#d8c5b8] bg-white px-5 py-2 text-sm font-black text-[#7b523a] transition hover:bg-[#f8efe7] disabled:cursor-not-allowed disabled:opacity-60"
+                  ? "inline-flex min-h-11 items-center justify-center rounded-full border border-[#d8c5b8] bg-white px-5 py-2 text-sm font-black text-[#7b523a] transition hover:bg-[#f8efe7] disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                   : "inline-flex min-h-11 items-center justify-center rounded-full bg-[#4e342e] px-5 py-2 text-sm font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[#bca99c]"
               }
             >
@@ -737,7 +623,7 @@ function SuggestionDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#d8c5b8] text-xl font-black text-[#7b523a] transition hover:bg-white"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#d8c5b8] text-xl font-black text-[#7b523a] transition hover:bg-white cursor-pointer"
           >
             ×
           </button>
@@ -775,7 +661,6 @@ export function ConciergePage() {
   const [savedIDs, setSavedIDs] = useState<number[]>([]);
   const [savingID, setSavingID] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [showDetail, setShowDetail] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const wsRef = useRef<ConciergeWsClient | null>(null);
@@ -924,16 +809,6 @@ export function ConciergePage() {
     client.connectGuest(targetSessionID, targetSessionKey);
   }
 
-  function updateScore(
-    key: keyof Pick<
-      SetPrefInput,
-      "flavor" | "acidity" | "bitterness" | "body" | "aroma"
-    >,
-    value: Score,
-  ) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
-
   async function startWithInput(input: SetPrefInput, userText: string) {
     clearConciergeState();
     const started = await startSearchSession(
@@ -985,6 +860,11 @@ export function ConciergePage() {
       return;
     }
 
+    if (!loggedIn) {
+      setError("AI検索を利用するにはログインしてください。");
+      return;
+    }
+
     setLoading(true);
     setError("");
     setMessage("");
@@ -1010,21 +890,6 @@ export function ConciergePage() {
       if (!(session && !loggedIn && wsStatus === "open")) {
         setLoading(false);
       }
-    }
-  }
-
-  async function onStartFromDetail() {
-    setLoading(true);
-    setError("");
-    setMessage("");
-
-    try {
-      await startWithInput(form, form.note || "手動条件で検索");
-      scrollToResults();
-    } catch (err: unknown) {
-      setError(toErrorMessage(err, "検索を開始できませんでした。"));
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -1150,21 +1015,21 @@ export function ConciergePage() {
           onClick={() =>
             void onPatch({ body: 2, note: "もう少し軽めにしたい" })
           }
-          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37] cursor-pointer"
         >
           軽めにする
         </button>
         <button
           type="button"
           onClick={() => void onPatch({ acidity: 1, note: "酸味を弱めたい" })}
-          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37] cursor-pointer"
         >
           酸味を弱める
         </button>
         <button
           type="button"
           onClick={() => void onPatch({ bitterness: 5, note: "苦めがよい" })}
-          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37] cursor-pointer"
         >
           苦め
         </button>
@@ -1173,7 +1038,7 @@ export function ConciergePage() {
           onClick={() =>
             void onPatch({ method: "milk", note: "ミルクに合うものがよい" })
           }
-          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37] cursor-pointer"
         >
           ミルク向け
         </button>
@@ -1186,7 +1051,7 @@ export function ConciergePage() {
               note: "アイスで飲みたい",
             })
           }
-          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37] cursor-pointer"
         >
           アイス向け
         </button>
@@ -1221,110 +1086,17 @@ export function ConciergePage() {
               />
             </FieldShell>
 
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() => setShowDetail((current) => !current)}
-                className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#d8c5b8] bg-white px-5 py-2 text-sm font-black text-[#7b523a] transition hover:bg-[#f8efe7]"
-              >
-                {showDetail ? "手動入力を閉じる" : "手動で入力する"}
-              </button>
-
-              {showDetail ? (
-                <div className="mt-4 rounded-[26px] border border-[#eadfd4] bg-white p-4">
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    <ScoreField
-                      label="香り・風味"
-                      value={form.flavor}
-                      onChange={(value) => updateScore("flavor", value)}
-                    />
-                    <ScoreField
-                      label="酸味"
-                      value={form.acidity}
-                      onChange={(value) => updateScore("acidity", value)}
-                    />
-                    <ScoreField
-                      label="苦味"
-                      value={form.bitterness}
-                      onChange={(value) => updateScore("bitterness", value)}
-                    />
-                    <ScoreField
-                      label="コク"
-                      value={form.body}
-                      onChange={(value) => updateScore("body", value)}
-                    />
-                    <ScoreField
-                      label="アロマ"
-                      value={form.aroma}
-                      onChange={(value) => updateScore("aroma", value)}
-                    />
-                    <SelectField
-                      label="気分"
-                      value={form.mood}
-                      options={moodOptions}
-                      onChange={(value) =>
-                        setForm((current) => ({ ...current, mood: value }))
-                      }
-                    />
-                    <SelectField
-                      label="飲み方"
-                      value={form.method}
-                      options={methodOptions}
-                      onChange={(value) =>
-                        setForm((current) => ({ ...current, method: value }))
-                      }
-                    />
-                    <SelectField
-                      label="シーン"
-                      value={form.scene}
-                      options={sceneOptions}
-                      onChange={(value) =>
-                        setForm((current) => ({ ...current, scene: value }))
-                      }
-                    />
-                    <SelectField
-                      label="温度"
-                      value={form.temp_pref}
-                      options={tempOptions}
-                      onChange={(value) =>
-                        setForm((current) => ({ ...current, temp_pref: value }))
-                      }
-                    />
-                  </div>
-
-                  <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_220px] lg:items-end">
-                    <FieldShell label="手動条件メモ">
-                      <textarea
-                        value={form.note}
-                        onChange={(event) =>
-                          setForm((current) => ({
-                            ...current,
-                            note: event.target.value,
-                          }))
-                        }
-                        rows={1}
-                        className="w-full rounded-2xl border border-[#dfcfc2] bg-white px-4 py-3 text-sm font-bold leading-7 text-[#4e342e] outline-none transition focus:border-[#7b523a] focus:ring-4 focus:ring-[#eadfd5]"
-                      />
-                    </FieldShell>
-
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => void onStartFromDetail()}
-                      className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#4e342e] px-6 py-3 text-sm font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[#bca99c]"
-                    >
-                      {loading ? "検索中..." : "手動条件で検索"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            {error ? (
+              <div className="mt-4 rounded-3xl border border-[#e3b8a6] bg-[#fff4ef] px-5 py-4 text-sm font-bold text-[#8a3d25]">
+                {error}
+              </div>
+            ) : null}
 
             <button
               type="button"
               disabled={loading}
               onClick={() => void onSendText(chatText)}
-              className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#4e342e] px-6 py-3 text-sm font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[#bca99c]"
+              className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#4e342e] px-6 py-3 text-sm font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[#bca99c] cursor-pointer"
             >
               {loading
                 ? "検索中..."
@@ -1339,7 +1111,7 @@ export function ConciergePage() {
                   key={text}
                   type="button"
                   onClick={() => void onSendText(text)}
-                  className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37] transition hover:bg-[#ead9c9]"
+                  className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37] transition hover:bg-[#ead9c9] cursor-pointer"
                 >
                   {text}
                 </button>
@@ -1348,8 +1120,8 @@ export function ConciergePage() {
 
             <p className="mt-4 text-sm font-semibold leading-7 text-[#7a6b62]">
               {loggedIn
-                ? "ログイン中なので、提案の保存と履歴再開に対応します。"
-                : "ゲストでも検索できます。保存と履歴一覧はログイン後に使えます。"}
+                ? "ログイン中なので、AI検索・提案保存・履歴再開に対応します。"
+                : "AI検索はログイン後に利用できます。保存と履歴一覧もログイン後に使えます。"}
             </p>
             <p className="mt-2 text-xs font-black tracking-[0.12em] text-[#9a755d] uppercase">
               ws: {loggedIn ? "http fallback" : wsStatus}
@@ -1392,18 +1164,13 @@ export function ConciergePage() {
         ) : null}
       </section>
 
-      {error ? (
-        <div className="mb-6 rounded-3xl border border-[#e3b8a6] bg-[#fff4ef] px-5 py-4 text-sm font-bold text-[#8a3d25]">
-          {error}
-        </div>
-      ) : null}
       <section ref={resultRef} className="scroll-mt-8 space-y-5">
         {result && suggestions.length > 0 ? (
           <div className="space-y-5">
             <div className="rounded-[32px] border border-[#eadfd4] bg-white px-5 py-5 shadow-[0_12px_30px_rgba(110,78,56,0.06)]">
               <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-sm font-black tracking-[0.24em] text-[#a1775b] uppercase">
+                  <p className="text-2xl font-black tracking-[0.24em] text-[#a1775b] uppercase">
                     ranking result
                   </p>
                   <h2 className="mt-1 text-2xl font-black text-[#4e342e]"></h2>
@@ -1413,7 +1180,7 @@ export function ConciergePage() {
                 </span>
               </div>
 
-              <div className="overflow-hidden rounded-[22px] border border-[#eadfd4] bg-white">
+              <div className="overflow-hidden rounded-[22px] border border-[#eadfd4] bg-white ">
                 {suggestions.map((suggestion, index) => (
                   <SuggestionRow
                     key={suggestion.id}
@@ -1455,26 +1222,6 @@ export function ConciergePage() {
         onToggleSave={onToggleSave}
         onClose={() => setDetailOpen(false)}
       />
-
-      {result?.followups && result.followups.length > 0 ? (
-        <section className="mt-8 rounded-[32px] border border-[#eadfd4] bg-[#fffaf5] p-5">
-          <p className="mb-3 text-xs font-black tracking-[0.24em] text-[#a1775b] uppercase">
-            next questions
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {result.followups.map((question) => (
-              <button
-                key={question}
-                type="button"
-                onClick={() => void onSendText(question)}
-                className="rounded-full border border-[#d8c5b8] bg-white px-4 py-2 text-sm font-black text-[#7b523a] transition hover:bg-[#f8efe7]"
-              >
-                {question}
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
     </main>
   );
 }

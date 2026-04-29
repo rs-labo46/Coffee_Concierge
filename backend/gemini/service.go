@@ -41,7 +41,7 @@ func NewService(apiKey string, model string) (*Service, error) {
 		model:   model,
 		baseURL: "https://generativelanguage.googleapis.com/v1beta",
 		httpClient: &http.Client{
-			Timeout: 8 * time.Second,
+			Timeout: 30 * time.Second,
 		},
 	}, nil
 }

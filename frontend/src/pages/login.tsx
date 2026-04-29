@@ -95,7 +95,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-2 inline-flex items-center justify-center rounded-2xl bg-[#4e342e] px-5 py-4 text-base font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-2 inline-flex items-center justify-center rounded-2xl bg-[#4e342e] px-5 py-4 text-base font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
             >
               {loading ? "ログイン中..." : "ログインする"}
             </button>

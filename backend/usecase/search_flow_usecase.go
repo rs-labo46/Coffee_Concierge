@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -131,7 +132,16 @@ type RankItem struct {
 	Reason string
 }
 
-// RBean候補を再ランキングする。
+const (
+	// DBから取得する公開Bean上限。DBには1000件規模を持たせる。
+	searchBeanFetchLimit = 1000
+	// Geminiへ渡す前のGo ranker事前選抜数。1000件を直接AIへ送らず、上位20件に圧縮する。
+	geminiCandidateLimit = 20
+	// 画面表示件数、およびGeminiに最終選定させる件数。
+	searchResultLimit = 5
+)
+
+// Bean候補を再ランキングする。
 type Ranker interface {
 	Rank(pref entity.Pref, beans []entity.Bean) ([]RankItem, error)
 }
@@ -723,8 +733,9 @@ func (u *searchFlowUsecase) buildFollowups(
 	return qs
 }
 
-// selectBeansは、登録済みの公開Bean JSONをGeminiへ渡し、Bean選定・理由文・追加質問を1回で生成させる。
-// Geminiが失敗した場合や不正値だけを返した場合は、Go側ランキングへフォールバックする。
+// selectBeansは、DBから公開Beanを最大1000件取得し、Go rankerで上位20件へ事前選抜してからGeminiへ渡す。
+// Geminiは事前選抜済み候補から5件を最終選定し、画面表示も5件に固定する。
+// Geminiが失敗した場合や不正値だけを返した場合は、Go側ランキング上位5件へフォールバックする。
 func (u *searchFlowUsecase) selectBeans(
 	pref entity.Pref,
 	requestID string,
@@ -733,24 +744,23 @@ func (u *searchFlowUsecase) selectBeans(
 	active := true
 	allBeans, err := u.beans.List(repository.BeanListQ{
 		Active: &active,
-		Limit:  100,
+		Limit:  searchBeanFetchLimit,
 		Offset: 0,
 	})
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	fallbackBeans, err := u.beans.SearchByPref(pref, 10)
+	rankedAll, err := u.rankBeans(pref, allBeans)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	fallback, err := u.rankBeans(pref, fallbackBeans)
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	fallback := limitRankItems(rankedAll, searchResultLimit)
+	geminiCandidates := diversifyRankItems(rankedAll, geminiCandidateLimit)
+	geminiCandidateBeans := rankItemsToBeans(geminiCandidates)
 
-	if u.gemini == nil || len(allBeans) == 0 {
+	if u.gemini == nil || len(geminiCandidateBeans) == 0 {
 		return fallback, allBeans, []string{}, nil
 	}
 
@@ -759,11 +769,14 @@ func (u *searchFlowUsecase) selectBeans(
 		"ai.request",
 		userID,
 		map[string]string{
-			"request_id": requestID,
-			"session_id": uintToStr(pref.SessionID),
-			"provider":   provider,
-			"model":      model,
-			"mode":       "search_bundle",
+			"request_id":      requestID,
+			"session_id":      uintToStr(pref.SessionID),
+			"provider":        provider,
+			"model":           model,
+			"mode":            "search_bundle",
+			"fetch_count":     strconv.Itoa(len(allBeans)),
+			"candidate_count": strconv.Itoa(len(geminiCandidateBeans)),
+			"result_limit":    strconv.Itoa(searchResultLimit),
 		},
 	)
 
@@ -771,21 +784,24 @@ func (u *searchFlowUsecase) selectBeans(
 		InputText:  pref.Note,
 		Pref:       pref,
 		Turns:      nil,
-		Candidates: beanToGeminiCandidates(allBeans),
-		Limit:      10,
+		Candidates: beanToGeminiCandidates(geminiCandidateBeans),
+		Limit:      searchResultLimit,
 	})
 	if err != nil {
 		u.writeAudit(
 			"ai.failed",
 			userID,
 			map[string]string{
-				"request_id":  requestID,
-				"session_id":  uintToStr(pref.SessionID),
-				"provider":    meta.Provider,
-				"model":       meta.Model,
-				"mode":        "search_bundle",
-				"duration_ms": strconv.FormatInt(meta.DurationMS, 10),
-				"error_type":  meta.ErrorType,
+				"request_id":      requestID,
+				"session_id":      uintToStr(pref.SessionID),
+				"provider":        meta.Provider,
+				"model":           meta.Model,
+				"mode":            "search_bundle",
+				"duration_ms":     strconv.FormatInt(meta.DurationMS, 10),
+				"error_type":      meta.ErrorType,
+				"fetch_count":     strconv.Itoa(len(allBeans)),
+				"candidate_count": strconv.Itoa(len(geminiCandidateBeans)),
+				"result_limit":    strconv.Itoa(searchResultLimit),
 			},
 		)
 		u.writeAudit(
@@ -804,38 +820,45 @@ func (u *searchFlowUsecase) selectBeans(
 		return fallback, allBeans, []string{}, nil
 	}
 
-	selected := applyBeanSelections(fallback, allBeans, bundle.Selections, 10)
+	selected := applyBeanSelections(fallback, geminiCandidateBeans, bundle.Selections, searchResultLimit)
 	if len(selected) == 0 {
 		u.writeAudit(
 			"ai.fallback",
 			userID,
 			map[string]string{
-				"request_id":    requestID,
-				"session_id":    uintToStr(pref.SessionID),
-				"provider":      meta.Provider,
-				"model":         meta.Model,
-				"mode":          "search_bundle",
-				"fallback_type": "go_ranker",
-				"reason":        "empty_valid_selection",
+				"request_id":      requestID,
+				"session_id":      uintToStr(pref.SessionID),
+				"provider":        meta.Provider,
+				"model":           meta.Model,
+				"mode":            "search_bundle",
+				"fallback_type":   "go_ranker",
+				"reason":          "empty_valid_selection",
+				"candidate_count": strconv.Itoa(len(geminiCandidateBeans)),
+				"result_limit":    strconv.Itoa(searchResultLimit),
 			},
 		)
 		return fallback, allBeans, limitStrings(bundle.Followups, 3), nil
 	}
 
+	selected = limitRankItems(selected, searchResultLimit)
 	followups := limitStrings(bundle.Followups, 3)
 	u.writeAudit(
 		"ai.success",
 		userID,
 		map[string]string{
-			"request_id":      requestID,
-			"session_id":      uintToStr(pref.SessionID),
-			"provider":        meta.Provider,
-			"model":           meta.Model,
-			"mode":            "search_bundle",
-			"status":          meta.Status,
-			"duration_ms":     strconv.FormatInt(meta.DurationMS, 10),
-			"selection_count": strconv.Itoa(len(selected)),
-			"followup_count":  strconv.Itoa(len(followups)),
+			"request_id":             requestID,
+			"session_id":             uintToStr(pref.SessionID),
+			"provider":               meta.Provider,
+			"model":                  meta.Model,
+			"mode":                   "search_bundle",
+			"status":                 meta.Status,
+			"duration_ms":            strconv.FormatInt(meta.DurationMS, 10),
+			"fetch_count":            strconv.Itoa(len(allBeans)),
+			"candidate_count":        strconv.Itoa(len(geminiCandidateBeans)),
+			"result_limit":           strconv.Itoa(searchResultLimit),
+			"gemini_selection_count": strconv.Itoa(len(bundle.Selections)),
+			"final_selection_count":  strconv.Itoa(len(selected)),
+			"followup_count":         strconv.Itoa(len(followups)),
 		},
 	)
 
@@ -1103,31 +1126,46 @@ func abs(v int) int {
 }
 
 func defaultReason(bean entity.Bean, pref entity.Pref) string {
-	parts := make([]string, 0, 3)
+	matches := make([]string, 0, 4)
+	matches = append(matches, string(bean.Roast)+" roast")
 
-	if pref.Body >= 4 {
-		parts = append(parts, "コク寄り")
-	} else if pref.Body <= 2 {
-		parts = append(parts, "軽め")
-	}
-
-	if pref.Acidity >= 4 {
-		parts = append(parts, "酸味寄り")
-	} else if pref.Acidity <= 2 {
-		parts = append(parts, "酸味控えめ")
+	if bean.Origin != "" {
+		matches = append(matches, bean.Origin+"産")
 	}
 
 	if pref.Bitterness >= 4 {
-		parts = append(parts, "苦味寄り")
-	} else if pref.Bitterness <= 2 {
-		parts = append(parts, "苦味控えめ")
+		if bean.Bitterness >= 4 {
+			matches = append(matches, "苦味がしっかりしています")
+		} else if bean.Bitterness <= 2 {
+			matches = append(matches, "苦味は控えめですが、全体のバランスで候補に残っています")
+		}
+	} else if pref.Bitterness <= 2 && bean.Bitterness <= 2 {
+		matches = append(matches, "苦味が控えめです")
 	}
 
-	if len(parts) == 0 {
-		return bean.Name + " は、今の条件に近い候補です。"
+	if pref.Body >= 4 {
+		if bean.Body >= 4 {
+			matches = append(matches, "コクと飲みごたえがあります")
+		}
+	} else if pref.Body <= 2 && bean.Body <= 2 {
+		matches = append(matches, "重すぎない軽めの口当たりです")
 	}
 
-	return bean.Name + " は、" + strings.Join(parts, "で、今の好みに合いやすい候補です。")
+	if pref.Acidity >= 4 && bean.Acidity >= 4 {
+		matches = append(matches, "明るい酸味があります")
+	} else if pref.Acidity <= 2 && bean.Acidity <= 2 {
+		matches = append(matches, "酸味が控えめです")
+	}
+
+	if pref.Aroma >= 4 && bean.Aroma >= 4 {
+		matches = append(matches, "香りの印象が豊かです")
+	}
+
+	if len(matches) > 4 {
+		matches = matches[:4]
+	}
+
+	return bean.Name + "は、" + strings.Join(matches, "、") + "。Gemini理由文が利用できない場合でも、登録済みの味覚値に基づいて現在の条件に近い候補として表示しています。"
 }
 
 func appendUniqueItems(base []entity.Item, extra []entity.Item) []entity.Item {
@@ -1164,6 +1202,89 @@ func toConditionDiff(in GeminiConditionDiffOut) ConditionDiff {
 		Excludes:   in.Excludes,
 		Note:       in.Note,
 	}
+}
+
+func diversifyRankItems(items []RankItem, limit int) []RankItem {
+	if limit <= 0 || len(items) == 0 {
+		return []RankItem{}
+	}
+
+	out := make([]RankItem, 0, limit)
+	seenStrict := map[string]struct{}{}
+	seenLoose := map[string]struct{}{}
+
+	for _, item := range items {
+		strictKey := beanProfileKey(item.Bean)
+		looseKey := beanLooseKey(item.Bean)
+		if _, ok := seenStrict[strictKey]; ok {
+			continue
+		}
+		if _, ok := seenLoose[looseKey]; ok && len(out) < limit/2 {
+			continue
+		}
+		seenStrict[strictKey] = struct{}{}
+		seenLoose[looseKey] = struct{}{}
+		out = append(out, item)
+		if len(out) >= limit {
+			return out
+		}
+	}
+
+	for _, item := range items {
+		if len(out) >= limit {
+			break
+		}
+		if containsRankItem(out, item.Bean.ID) {
+			continue
+		}
+		out = append(out, item)
+	}
+
+	return out
+}
+
+func beanProfileKey(bean entity.Bean) string {
+	return fmt.Sprintf(
+		"%s|%s|%d|%d|%d|%d|%d",
+		bean.Origin,
+		bean.Roast,
+		bean.Flavor,
+		bean.Acidity,
+		bean.Bitterness,
+		bean.Body,
+		bean.Aroma,
+	)
+}
+
+func beanLooseKey(bean entity.Bean) string {
+	return fmt.Sprintf("%s|%s", bean.Origin, bean.Roast)
+}
+
+func containsRankItem(items []RankItem, beanID uint) bool {
+	for _, item := range items {
+		if item.Bean.ID == beanID {
+			return true
+		}
+	}
+	return false
+}
+
+func limitRankItems(items []RankItem, limit int) []RankItem {
+	if limit <= 0 || len(items) == 0 {
+		return []RankItem{}
+	}
+	if len(items) <= limit {
+		return items
+	}
+	return items[:limit]
+}
+
+func rankItemsToBeans(items []RankItem) []entity.Bean {
+	beans := make([]entity.Bean, 0, len(items))
+	for _, item := range items {
+		beans = append(beans, item.Bean)
+	}
+	return beans
 }
 
 func limitStrings(xs []string, limit int) []string {

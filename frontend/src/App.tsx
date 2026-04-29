@@ -143,7 +143,7 @@ function HeaderAuthActions() {
       <button
         type="button"
         onClick={() => void onLogout()}
-        className="inline-flex min-h-12 items-center justify-center rounded-full bg-[#4e342e] px-6 py-2 text-sm font-black text-white shadow-[0_10px_22px_rgba(78,52,46,0.20)] transition hover:-translate-y-0.5 hover:opacity-90"
+        className="inline-flex min-h-12 items-center justify-center rounded-full bg-[#4e342e] px-6 py-2 text-sm font-black text-white shadow-[0_10px_22px_rgba(78,52,46,0.20)] transition hover:-translate-y-0.5 hover:opacity-90 cursor-pointer"
       >
         ログアウト
       </button>

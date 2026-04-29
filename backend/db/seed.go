@@ -218,72 +218,132 @@ func seedItems(db *gorm.DB) error {
 }
 
 func seedBeans(db *gorm.DB) error {
+	const targetBeanCount = 1000
+
 	var count int64
 	if err := db.Model(&entity.Bean{}).Count(&count).Error; err != nil {
 		return err
 	}
 
-	if count > 0 {
-		return nil
+	if count == 0 {
+		baseBeans := []entity.Bean{
+			{Name: "Ethiopia Floral Light", Roast: entity.RoastLight, Origin: "Ethiopia", Flavor: 5, Acidity: 4, Bitterness: 1, Body: 2, Aroma: 5, Desc: "花のような香りと明るい酸味を持つ浅煎り豆です。", BuyURL: "https://example.com/beans/ethiopia-floral-light", Active: true},
+			{Name: "Brazil Balance Medium", Roast: entity.RoastMedium, Origin: "Brazil", Flavor: 3, Acidity: 2, Bitterness: 3, Body: 3, Aroma: 3, Desc: "ナッツ感と甘さのバランスがよい中煎り豆です。", BuyURL: "https://example.com/beans/brazil-balance-medium", Active: true},
+			{Name: "Colombia Morning Comfort", Roast: entity.RoastMedium, Origin: "Colombia", Flavor: 4, Acidity: 3, Bitterness: 2, Body: 3, Aroma: 4, Desc: "朝に飲みやすい、甘さと香りのバランスが取れた豆です。", BuyURL: "https://example.com/beans/colombia-morning-comfort", Active: true},
+			{Name: "Indonesia Deep Body", Roast: entity.RoastDark, Origin: "Indonesia", Flavor: 2, Acidity: 1, Bitterness: 5, Body: 5, Aroma: 3, Desc: "深いコクとしっかりした苦味を持つ深煎り豆です。", BuyURL: "https://example.com/beans/indonesia-deep-body", Active: true},
+		}
+
+		for _, bean := range baseBeans {
+			if err := db.Create(&bean).Error; err != nil {
+				return err
+			}
+		}
+		count = int64(len(baseBeans))
 	}
 
-	beans := []entity.Bean{
-		{
-			Name:       "Ethiopia Floral Light",
-			Roast:      entity.RoastLight,
-			Origin:     "Ethiopia",
-			Flavor:     5,
-			Acidity:    4,
-			Bitterness: 1,
-			Body:       2,
-			Aroma:      5,
-			Desc:       "花のような香りと明るい酸味を持つ浅煎り豆です。",
-			BuyURL:     "https://example.com/beans/ethiopia-floral-light",
-			Active:     true,
-		},
-		{
-			Name:       "Brazil Balance Medium",
-			Roast:      entity.RoastMedium,
-			Origin:     "Brazil",
-			Flavor:     3,
-			Acidity:    2,
-			Bitterness: 3,
-			Body:       3,
-			Aroma:      3,
-			Desc:       "ナッツ感と甘さのバランスがよい中煎り豆です。",
-			BuyURL:     "https://example.com/beans/brazil-balance-medium",
-			Active:     true,
-		},
-		{
-			Name:       "Colombia Morning Comfort",
-			Roast:      entity.RoastMedium,
-			Origin:     "Colombia",
-			Flavor:     4,
-			Acidity:    3,
-			Bitterness: 2,
-			Body:       3,
-			Aroma:      4,
-			Desc:       "朝に飲みやすい、甘さと香りのバランスが取れた豆です。",
-			BuyURL:     "https://example.com/beans/colombia-morning-comfort",
-			Active:     true,
-		},
-		{
-			Name:       "Indonesia Deep Body",
-			Roast:      entity.RoastDark,
-			Origin:     "Indonesia",
-			Flavor:     2,
-			Acidity:    1,
-			Bitterness: 5,
-			Body:       5,
-			Aroma:      3,
-			Desc:       "深いコクとしっかりした苦味を持つ深煎り豆です。",
-			BuyURL:     "https://example.com/beans/indonesia-deep-body",
-			Active:     true,
-		},
+	if count >= targetBeanCount {
+		return rebalanceGeneratedBeans(db)
 	}
 
-	for _, bean := range beans {
+	existing := map[string]struct{}{}
+	var names []string
+	if err := db.Model(&entity.Bean{}).Pluck("name", &names).Error; err != nil {
+		return err
+	}
+	for _, name := range names {
+		existing[name] = struct{}{}
+	}
+
+	for i := 0; count < targetBeanCount; i++ {
+		bean := buildGeneratedBean(i)
+		if _, ok := existing[bean.Name]; ok {
+			continue
+		}
 		if err := db.Create(&bean).Error; err != nil {
+			return err
+		}
+		existing[bean.Name] = struct{}{}
+		count++
+	}
+
+	return rebalanceGeneratedBeans(db)
+}
+
+func buildGeneratedBean(i int) entity.Bean {
+	origins := []string{
+		"Ethiopia", "Brazil", "Colombia", "Indonesia", "Kenya",
+		"Guatemala", "Costa Rica", "Honduras", "Rwanda", "Tanzania",
+		"Panama", "El Salvador", "Nicaragua", "Peru", "Mexico",
+	}
+	flavorNotes := []string{"Citrus", "Cacao", "Berry", "Nutty", "Caramel", "Spice", "Floral", "Herbal", "Honey", "Classic"}
+	origin := origins[seedValue(i, 7, 3, len(origins))]
+	roasts := []entity.Roast{entity.RoastLight, entity.RoastMedium, entity.RoastDark}
+	roast := roasts[seedValue(i, 11, 1, len(roasts))]
+	note := flavorNotes[seedValue(i, 17, 2, len(flavorNotes))]
+
+	flavor := seedScore(i, 19, 1)
+	acidity := seedScore(i, 23, 2)
+	bitterness := seedScore(i, 29, 3)
+	body := seedScore(i, 31, 4)
+	aroma := seedScore(i, 37, 5)
+
+	// roastごとの現実感は少し残しつつ、同一スコアが連続しないように最低限だけ補正する。
+	if roast == entity.RoastLight {
+		acidity = maxInt(acidity, 3)
+		aroma = maxInt(aroma, 3)
+		if bitterness == 5 && seedValue(i, 5, 1, 2) == 0 {
+			bitterness = 4
+		}
+	}
+	if roast == entity.RoastDark {
+		bitterness = maxInt(bitterness, 3)
+		body = maxInt(body, 3)
+		if acidity == 5 && seedValue(i, 5, 2, 2) == 0 {
+			acidity = 4
+		}
+	}
+	if roast == entity.RoastMedium && seedValue(i, 13, 1, 3) == 0 {
+		flavor = maxInt(flavor, 3)
+	}
+
+	name := fmt.Sprintf("%s %s %s Profile %04d", origin, roastName(roast), note, i+1)
+	return entity.Bean{
+		Name:       name,
+		Roast:      roast,
+		Origin:     origin,
+		Flavor:     flavor,
+		Acidity:    acidity,
+		Bitterness: bitterness,
+		Body:       body,
+		Aroma:      aroma,
+		Desc:       buildGeneratedBeanDesc(origin, roast, flavor, acidity, bitterness, body, aroma),
+		BuyURL:     fmt.Sprintf("https://example.com/beans/generated-%04d", i+1),
+		Active:     true,
+	}
+}
+
+func rebalanceGeneratedBeans(db *gorm.DB) error {
+	var beans []entity.Bean
+	if err := db.Where("name LIKE ?", "%Profile %").Order("id asc").Find(&beans).Error; err != nil {
+		return err
+	}
+
+	for i, bean := range beans {
+		next := buildGeneratedBean(i)
+		updates := map[string]interface{}{
+			"name":       next.Name,
+			"roast":      next.Roast,
+			"origin":     next.Origin,
+			"flavor":     next.Flavor,
+			"acidity":    next.Acidity,
+			"bitterness": next.Bitterness,
+			"body":       next.Body,
+			"aroma":      next.Aroma,
+			"desc":       next.Desc,
+			"buy_url":    next.BuyURL,
+			"active":     true,
+		}
+		if err := db.Model(&entity.Bean{}).Where("id = ?", bean.ID).Updates(updates).Error; err != nil {
 			return err
 		}
 	}
@@ -291,21 +351,55 @@ func seedBeans(db *gorm.DB) error {
 	return nil
 }
 
+func seedScore(i int, mul int, salt int) int {
+	return 1 + seedValue(i, mul, salt, 5)
+}
+
+func seedValue(i int, mul int, salt int, mod int) int {
+	if mod <= 0 {
+		return 0
+	}
+	v := (i+1)*(i+salt*13)*mul + salt*salt*17 + i*7
+	if v < 0 {
+		v = -v
+	}
+	return v % mod
+}
+
+func roastName(roast entity.Roast) string {
+	switch roast {
+	case entity.RoastLight:
+		return "Light"
+	case entity.RoastDark:
+		return "Dark"
+	default:
+		return "Medium"
+	}
+}
+
+func buildGeneratedBeanDesc(origin string, roast entity.Roast, flavor int, acidity int, bitterness int, body int, aroma int) string {
+	return fmt.Sprintf("%s産の%s豆です。風味%d、酸味%d、苦味%d、コク%d、香り%dの検証用データです。", origin, roastName(roast), flavor, acidity, bitterness, body, aroma)
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func seedRecipes(db *gorm.DB) error {
-	var count int64
-	if err := db.Model(&entity.Recipe{}).Count(&count).Error; err != nil {
-		return err
-	}
-
-	if count > 0 {
-		return nil
-	}
-
 	var beans []entity.Bean
 	if err := db.Order("id asc").Find(&beans).Error; err != nil {
 		return err
 	}
-
 	if len(beans) == 0 {
 		return fmt.Errorf("seed bean not found")
 	}
@@ -324,89 +418,33 @@ func seedRecipes(db *gorm.DB) error {
 		Active   bool
 	}
 
-	recipes := make([]seedRecipe, 0, len(beans)*2)
-
-	for _, bean := range beans {
-		recipes = append(recipes, seedRecipe{
-			BeanID:   bean.ID,
-			Name:     bean.Name + " Drip Recipe",
-			Method:   entity.MethodDrip,
-			TempPref: entity.TempHot,
-			Grind:    "medium",
-			Ratio:    "1:15",
-			Temp:     92,
-			TimeSec:  180,
-			Steps: []string{
-				"豆を中挽きにする",
-				"お湯を少量注いで30秒蒸らす",
-				"残りのお湯を2回に分けて注ぐ",
-			},
-			Desc:   "豆の個性を確認しやすい基本のハンドドリップレシピです。",
-			Active: true,
-		})
-
-		recipes = append(recipes, seedRecipe{
-			BeanID:   bean.ID,
-			Name:     bean.Name + " Iced Recipe",
-			Method:   entity.MethodIced,
-			TempPref: entity.TempIce,
-			Grind:    "medium-fine",
-			Ratio:    "1:10",
-			Temp:     90,
-			TimeSec:  150,
-			Steps: []string{
-				"氷をサーバーに入れる",
-				"濃いめに抽出する",
-				"抽出後すぐに氷で冷やす",
-			},
-			Desc:   "氷で薄まる前提で濃度を高めにしたアイス向けレシピです。",
-			Active: true,
-		})
-	}
-
 	now := time.Now()
-
-	for _, recipe := range recipes {
-		if err := db.Exec(
-			`
-			INSERT INTO recipes (
-				bean_id,
-				name,
-				method,
-				temp_pref,
-				grind,
-				ratio,
-				temp,
-				time_sec,
-				steps,
-				"desc",
-				active,
-				created_at,
-				updated_at
-			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			`,
-			recipe.BeanID,
-			recipe.Name,
-			string(recipe.Method),
-			string(recipe.TempPref),
-			recipe.Grind,
-			recipe.Ratio,
-			recipe.Temp,
-			recipe.TimeSec,
-			pq.Array(recipe.Steps),
-			recipe.Desc,
-			recipe.Active,
-			now,
-			now,
-		).Error; err != nil {
+	for _, bean := range beans {
+		var count int64
+		if err := db.Model(&entity.Recipe{}).Where("bean_id = ?", bean.ID).Count(&count).Error; err != nil {
 			return err
+		}
+		if count > 0 {
+			continue
+		}
+
+		recipes := []seedRecipe{
+			{BeanID: bean.ID, Name: bean.Name + " Drip Recipe", Method: entity.MethodDrip, TempPref: entity.TempHot, Grind: "medium", Ratio: "1:15", Temp: 92, TimeSec: 180, Steps: []string{"豆を中挽きにする", "お湯を少量注いで30秒蒸らす", "残りのお湯を2回に分けて注ぐ"}, Desc: "豆の個性を確認しやすい基本のハンドドリップレシピです。", Active: true},
+			{BeanID: bean.ID, Name: bean.Name + " Iced Recipe", Method: entity.MethodIced, TempPref: entity.TempIce, Grind: "medium-fine", Ratio: "1:10", Temp: 90, TimeSec: 150, Steps: []string{"氷をサーバーに入れる", "濃いめに抽出する", "抽出後すぐに氷で冷やす"}, Desc: "氷で薄まる前提で濃度を高めにしたアイス向けレシピです。", Active: true},
+		}
+
+		for _, recipe := range recipes {
+			if err := db.Exec(
+				`INSERT INTO recipes (bean_id, name, method, temp_pref, grind, ratio, temp, time_sec, steps, "desc", active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				recipe.BeanID, recipe.Name, string(recipe.Method), string(recipe.TempPref), recipe.Grind, recipe.Ratio, recipe.Temp, recipe.TimeSec, pq.Array(recipe.Steps), recipe.Desc, recipe.Active, now, now,
+			).Error; err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
-
 func min4(a int, b int, c int, d int) int {
 	m := a
 	if b < m {
