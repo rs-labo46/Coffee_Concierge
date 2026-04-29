@@ -176,86 +176,9 @@ function toScore(value: string): Score {
 
 function textToPatchInput(text: string): PatchPrefInput {
   const note = text.trim();
-  const input: PatchPrefInput = { note };
 
-  if (
-    note.includes("苦め") ||
-    note.includes("苦い") ||
-    note.includes("ビター")
-  ) {
-    input.bitterness = 5;
-  }
-  if (
-    note.includes("苦味弱め") ||
-    note.includes("苦み弱め") ||
-    note.includes("苦くない")
-  ) {
-    input.bitterness = 1;
-  }
-  if (
-    note.includes("酸味弱め") ||
-    note.includes("酸味を弱め") ||
-    note.includes("酸っぱくない")
-  ) {
-    input.acidity = 1;
-  }
-  if (
-    note.includes("酸味強め") ||
-    note.includes("酸っぱい") ||
-    note.includes("フルーティ")
-  ) {
-    input.acidity = 5;
-    input.flavor = 5;
-  }
-  if (
-    note.includes("軽め") ||
-    note.includes("すっきり") ||
-    note.includes("飲みやすい")
-  ) {
-    input.body = 2;
-  }
-  if (
-    note.includes("重め") ||
-    note.includes("どっしり") ||
-    note.includes("コク")
-  ) {
-    input.body = 5;
-  }
-  if (note.includes("香り") || note.includes("アロマ")) {
-    input.aroma = 5;
-  }
-  if (note.includes("ミルク") || note.includes("ラテ")) {
-    input.method = "milk";
-  }
-  if (note.includes("アイス") || note.includes("冷たい")) {
-    input.method = "iced";
-    input.temp_pref = "ice";
-  }
-  if (note.includes("ホット") || note.includes("温かい")) {
-    input.temp_pref = "hot";
-  }
-  if (note.includes("朝")) {
-    input.mood = "morning";
-  }
-  if (note.includes("仕事") || note.includes("作業")) {
-    input.mood = "work";
-    input.scene = "work";
-  }
-  if (note.includes("休憩")) {
-    input.scene = "break";
-  }
-  if (note.includes("食後")) {
-    input.scene = "after_meal";
-  }
-  if (note.includes("夜")) {
-    input.mood = "night";
-  }
-  if (note.includes("リラックス") || note.includes("くつろぎ")) {
-    input.mood = "relax";
-    input.scene = "relax";
-  }
-
-  return input;
+  // 自然文の味覚判定はfrontendでは行わない。
+  return { note };
 }
 
 function mergePatchToSetPref(
@@ -537,9 +460,69 @@ function ConditionPill({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SuggestionRow({
+  suggestion,
+  result,
+  displayRank,
+  selected,
+  onSelect,
+}: {
+  suggestion: Suggestion;
+  result: SearchResult;
+  displayRank: number;
+  selected: boolean;
+  onSelect: (id: number) => void;
+}) {
+  const bean = beanByID(result, suggestion);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(suggestion.id)}
+      className={
+        selected
+          ? "flex w-full items-start gap-4 border-b border-[#eadfd4] bg-[#fffaf5] px-3 py-4 text-left transition last:border-b-0"
+          : "flex w-full items-start gap-4 border-b border-[#eadfd4] px-3 py-4 text-left transition last:border-b-0 hover:bg-[#fffaf5]"
+      }
+    >
+      <span
+        className={
+          selected
+            ? "mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#7b523a] text-base font-black text-white"
+            : "mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f3e7dc] text-base font-black text-[#7b523a]"
+        }
+      >
+        {displayRank}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="line-clamp-1 text-[20px] font-black leading-8 text-[#4e342e]">
+            {bean?.name || `Bean #${suggestion.bean_id}`}
+          </h3>
+          <span className="rounded-full bg-[#b08968] px-3 py-1 text-xs font-black text-white">
+            SCORE {suggestion.score}
+          </span>
+        </div>
+
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold text-[#8a756a]">
+          {bean ? <span>{roastLabel(bean.roast)}</span> : null}
+          {bean?.origin ? <span>{bean.origin}</span> : null}
+          <span>RANK {displayRank}</span>
+        </div>
+
+        <p className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-[#6f625b]">
+          {suggestion.reason || "この候補に合う理由はまだ生成されていません。"}
+        </p>
+      </div>
+    </button>
+  );
+}
+
 function SuggestionCard({
   suggestion,
   result,
+  displayRank,
   canSave,
   savingID,
   savedIDs,
@@ -547,6 +530,7 @@ function SuggestionCard({
 }: {
   suggestion: Suggestion;
   result: SearchResult;
+  displayRank: number;
   canSave: boolean;
   savingID: number | null;
   savedIDs: number[];
@@ -561,18 +545,29 @@ function SuggestionCard({
     <article className="overflow-hidden rounded-[30px] border border-[#eadfd4] bg-white shadow-[0_12px_30px_rgba(110,78,56,0.08)]">
       <div className="border-b border-[#eadfd4] bg-[#fbf4ec] px-5 py-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="mb-2 text-xs font-black tracking-[0.24em] text-[#a1775b] uppercase">
-              rank {suggestion.rank} / score {suggestion.score}
-            </p>
-            <h3 className="text-2xl font-black text-[#4e342e]">
-              {bean?.name || `Bean #${suggestion.bean_id}`}
-            </h3>
-            {bean ? (
-              <p className="mt-1 text-sm font-bold text-[#7a6b62]">
-                {roastLabel(bean.roast)} / {bean.origin}
+          <div className="flex items-start gap-4">
+            <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-[#4e342e] text-white shadow-[0_8px_18px_rgba(78,52,46,0.18)]">
+              <span className="text-[10px] font-black tracking-[0.16em] uppercase text-[#f2dcc8]">
+                rank
+              </span>
+              <span className="text-2xl font-black leading-none">
+                {displayRank}
+              </span>
+            </div>
+
+            <div>
+              <p className="mb-2 inline-flex rounded-full bg-white px-3 py-1 text-sm font-black text-[#7b523a]">
+                SCORE {suggestion.score}
               </p>
-            ) : null}
+              <h3 className="text-2xl font-black text-[#4e342e]">
+                {bean?.name || `Bean #${suggestion.bean_id}`}
+              </h3>
+              {bean ? (
+                <p className="mt-1 text-sm font-bold text-[#7a6b62]">
+                  {roastLabel(bean.roast)} / {bean.origin}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           {canSave ? (
@@ -605,80 +600,162 @@ function SuggestionCard({
         </div>
       </div>
 
-      <div className="grid gap-5 px-5 py-5 lg:grid-cols-[1.2fr_0.8fr]">
-        <div>
-          <p className="mb-4 rounded-2xl bg-[#fffaf5] px-4 py-3 text-sm font-bold leading-7 text-[#5f4a40]">
-            {suggestion.reason ||
-              "この候補に合う理由はまだ生成されていません。"}
-          </p>
-
-          {bean ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <AxisBadge label="flavor" value={bean.flavor} />
-              <AxisBadge label="acidity" value={bean.acidity} />
-              <AxisBadge label="bitter" value={bean.bitterness} />
-              <AxisBadge label="body" value={bean.body} />
-              <AxisBadge label="aroma" value={bean.aroma} />
-            </div>
-          ) : null}
-
-          {bean?.desc ? (
-            <p className="mt-4 text-sm font-semibold leading-7 text-[#77685f]">
-              {bean.desc}
+      <div className="px-5 py-5">
+        <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+          <div>
+            <p className="mb-4 rounded-2xl bg-[#fffaf5] px-4 py-3 text-sm font-bold leading-7 text-[#5f4a40]">
+              {suggestion.reason ||
+                "この候補に合う理由はまだ生成されていません。"}
             </p>
-          ) : null}
-        </div>
 
-        <div className="space-y-4">
-          {recipe ? (
-            <section className="rounded-3xl border border-[#eadfd4] bg-[#fcf8f3] p-4">
-              <p className="mb-1 text-xs font-black tracking-[0.2em] text-[#a1775b] uppercase">
-                recipe
+            {bean ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <AxisBadge label="flavor" value={bean.flavor} />
+                <AxisBadge label="acidity" value={bean.acidity} />
+                <AxisBadge label="bitter" value={bean.bitterness} />
+                <AxisBadge label="body" value={bean.body} />
+                <AxisBadge label="aroma" value={bean.aroma} />
+              </div>
+            ) : null}
+
+            {bean?.desc ? (
+              <p className="mt-4 text-sm font-semibold leading-7 text-[#77685f]">
+                {bean.desc}
               </p>
-              <h4 className="text-lg font-black text-[#4e342e]">
-                {recipe.name}
-              </h4>
-              <p className="mt-2 text-sm font-bold text-[#74675f]">
-                {methodLabel(recipe.method)} / {tempPrefLabel(recipe.temp_pref)}{" "}
-                / {recipe.temp}℃
-              </p>
-              <p className="mt-2 text-sm font-semibold leading-6 text-[#7a6b62]">
-                {recipe.grind} / {recipe.ratio} / {recipe.time_sec}秒
-              </p>
-              {recipe.desc ? (
-                <p className="mt-2 text-sm font-semibold leading-6 text-[#7a6b62]">
-                  {recipe.desc}
+            ) : null}
+          </div>
+
+          <div>
+            {recipe ? (
+              <section className="rounded-3xl border border-[#eadfd4] bg-[#fcf8f3] p-4">
+                <p className="mb-1 text-xs font-black tracking-[0.2em] text-[#a1775b] uppercase">
+                  recipe
                 </p>
-              ) : null}
-            </section>
-          ) : null}
-
-          {relatedItems.length > 0 ? (
-            <section className="rounded-3xl border border-[#eadfd4] bg-[#fffaf5] p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="mb-1 text-xs font-black tracking-[0.2em] text-[#a1775b] uppercase">
-                    related items
+                <h4 className="text-lg font-black text-[#4e342e]">
+                  {recipe.name}
+                </h4>
+                <p className="mt-2 text-sm font-bold text-[#74675f]">
+                  {methodLabel(recipe.method)} /{" "}
+                  {tempPrefLabel(recipe.temp_pref)} / {recipe.temp}℃
+                </p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-[#7a6b62]">
+                  {recipe.grind} / {recipe.ratio} / {recipe.time_sec}秒
+                </p>
+                {recipe.desc ? (
+                  <p className="mt-2 text-sm font-semibold leading-6 text-[#7a6b62]">
+                    {recipe.desc}
                   </p>
-                  <h4 className="text-lg font-black text-[#4e342e]">
-                    関連する記事・ショップ・ニュース
-                  </h4>
-                </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-[#7b523a]">
-                  {relatedItems.length}件
-                </span>
-              </div>
-
-              <div className="grid gap-3">
-                {relatedItems.map((relatedItem) => (
-                  <RelatedItemCard key={relatedItem.id} item={relatedItem} />
-                ))}
-              </div>
-            </section>
-          ) : null}
+                ) : null}
+              </section>
+            ) : null}
+          </div>
         </div>
+
+        {relatedItems.length > 0 ? (
+          <section className="mt-5 rounded-3xl border border-[#eadfd4] bg-[#fffaf5] p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="mb-1 text-xs font-black tracking-[0.2em] text-[#a1775b] uppercase">
+                  related items
+                </p>
+                <h4 className="text-lg font-black text-[#4e342e]">
+                  関連する記事・ショップ・ニュース
+                </h4>
+              </div>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-black text-[#7b523a]">
+                {relatedItems.length}件
+              </span>
+            </div>
+
+            <div className="grid gap-3">
+              {relatedItems.map((relatedItem) => (
+                <RelatedItemCard key={relatedItem.id} item={relatedItem} />
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </article>
+  );
+}
+
+function SuggestionDetailModal({
+  open,
+  suggestion,
+  result,
+  displayRank,
+  canSave,
+  savingID,
+  savedIDs,
+  onToggleSave,
+  onClose,
+}: {
+  open: boolean;
+  suggestion: Suggestion | null;
+  result: SearchResult | null;
+  displayRank: number;
+  canSave: boolean;
+  savingID: number | null;
+  savedIDs: number[];
+  onToggleSave: (suggestion: Suggestion) => Promise<void>;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose]);
+
+  if (!open || !suggestion || !result) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#4e342e]/45 px-4 py-6">
+      <div className="absolute inset-0" onClick={onClose} />
+
+      <div className="relative z-10 max-h-[90vh] w-full max-w-[1080px] overflow-hidden rounded-[22px] border border-[#eadfd4] bg-white shadow-[0_20px_48px_rgba(110,78,56,0.25)]">
+        <div className="flex items-start justify-between gap-4 border-b border-[#eadfd4] bg-[#fcf6f0] px-5 py-4">
+          <div>
+            <p className="text-sm font-black tracking-[0.24em] text-[#a1775b] uppercase">
+              rank {displayRank} preview
+            </p>
+            <h2 className="mt-1 text-2xl font-black text-[#4e342e]">
+              おすすめ詳細
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#d8c5b8] text-xl font-black text-[#7b523a] transition hover:bg-white"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-5 py-5 md:px-6 md:py-6">
+          <SuggestionCard
+            suggestion={suggestion}
+            result={result}
+            displayRank={displayRank}
+            canSave={canSave}
+            savingID={savingID}
+            savedIDs={savedIDs}
+            onToggleSave={onToggleSave}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -689,7 +766,11 @@ export function ConciergePage() {
   const [sessionKey, setSessionKey] = useState<string>("");
   const [pref, setPref] = useState<Pref | null>(null);
   const [result, setResult] = useState<SearchResult | null>(null);
-  const [chatText, setChatText] = useState<string>("朝に軽めで飲みたい");
+  const [selectedSuggestionID, setSelectedSuggestionID] = useState<
+    number | null
+  >(null);
+  const [detailOpen, setDetailOpen] = useState<boolean>(false);
+  const [chatText, setChatText] = useState<string>("");
   const [turns, setTurns] = useState<LocalTurn[]>([]);
   const [savedIDs, setSavedIDs] = useState<number[]>([]);
   const [savingID, setSavingID] = useState<number | null>(null);
@@ -698,6 +779,7 @@ export function ConciergePage() {
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const wsRef = useRef<ConciergeWsClient | null>(null);
+  const resultRef = useRef<HTMLElement | null>(null);
   const [wsStatus, setWsStatus] = useState<ConciergeWsStatus>("idle");
 
   const loggedIn = !!user && hasAccessToken();
@@ -706,8 +788,49 @@ export function ConciergePage() {
   const canSaveSuggestion = loggedIn && sessionOwnedByUser;
 
   const suggestions = useMemo(() => {
-    return [...(result?.suggestions || [])].sort((a, b) => a.rank - b.rank);
+    return [...(result?.suggestions || [])].sort((a, b) => {
+      if (b.score === a.score) {
+        return a.rank - b.rank;
+      }
+      return b.score - a.score;
+    });
   }, [result]);
+
+  const selectedSuggestion = useMemo(() => {
+    return (
+      suggestions.find(
+        (suggestion) => suggestion.id === selectedSuggestionID,
+      ) || null
+    );
+  }, [selectedSuggestionID, suggestions]);
+
+  const selectedDisplayRank = useMemo(() => {
+    if (!selectedSuggestion) {
+      return 0;
+    }
+    const index = suggestions.findIndex(
+      (suggestion) => suggestion.id === selectedSuggestion.id,
+    );
+    return index >= 0 ? index + 1 : selectedSuggestion.rank;
+  }, [selectedSuggestion, suggestions]);
+
+  useEffect(() => {
+    if (suggestions.length === 0) {
+      setSelectedSuggestionID(null);
+      setDetailOpen(false);
+      return;
+    }
+
+    setSelectedSuggestionID((current) => {
+      if (
+        current &&
+        suggestions.some((suggestion) => suggestion.id === current)
+      ) {
+        return current;
+      }
+      return null;
+    });
+  }, [suggestions]);
 
   useEffect(() => {
     return () => {
@@ -768,6 +891,17 @@ export function ConciergePage() {
     ]);
   }
 
+  function scrollToResults() {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        resultRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
+  }
+
   function connectGuestWs(targetSessionID: number, targetSessionKey: string) {
     const client = new ConciergeWsClient({
       onStatus: setWsStatus,
@@ -775,6 +909,7 @@ export function ConciergePage() {
         setResult(nextResult);
         addTurn("system", "WebSocketで会話内容を反映して候補を更新しました。");
         setMessage("会話内容をもとに候補を更新しました。");
+        scrollToResults();
       },
       onError: (msg) => {
         setError(msg);
@@ -868,6 +1003,7 @@ export function ConciergePage() {
       const input = textToPatchInput(trimmed);
       await patchWithInput(input, trimmed);
       setChatText("");
+      scrollToResults();
     } catch (err: unknown) {
       setError(toErrorMessage(err, "希望を送信できませんでした。"));
     } finally {
@@ -883,7 +1019,8 @@ export function ConciergePage() {
     setMessage("");
 
     try {
-      await startWithInput(form, form.note || "詳細条件で検索");
+      await startWithInput(form, form.note || "手動条件で検索");
+      scrollToResults();
     } catch (err: unknown) {
       setError(toErrorMessage(err, "検索を開始できませんでした。"));
     } finally {
@@ -900,6 +1037,7 @@ export function ConciergePage() {
 
     try {
       await patchWithInput(input, label);
+      scrollToResults();
     } catch (err: unknown) {
       setError(toErrorMessage(err, "条件を更新できませんでした。"));
     } finally {
@@ -975,6 +1113,87 @@ export function ConciergePage() {
     }
   }
 
+  const messagePanel = message ? (
+    <div className="rounded-3xl border border-[#cfe1c8] bg-[#f5fff2] px-5 py-4 text-sm font-bold text-[#3f6b36]">
+      {message}
+    </div>
+  ) : null;
+
+  const currentConditionPanel = pref ? (
+    <section className="rounded-[32px] border border-[#eadfd4] bg-white p-5 shadow-[0_10px_28px_rgba(110,78,56,0.06)]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="mb-2 text-xs font-black tracking-[0.24em] text-[#a1775b] uppercase">
+            current condition
+          </p>
+          <h3 className="text-2xl font-black text-[#4e342e]">
+            {moodLabel(pref.mood)} / {methodLabel(pref.method)} /{" "}
+            {sceneLabel(pref.scene)} / {tempPrefLabel(pref.temp_pref)}
+          </h3>
+          <p className="mt-2 text-sm font-semibold text-[#7a6b62]">
+            {pref.note || "補足メモなし"}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <ConditionPill label="香り" value={String(pref.flavor)} />
+          <ConditionPill label="酸味" value={String(pref.acidity)} />
+          <ConditionPill label="苦味" value={String(pref.bitterness)} />
+          <ConditionPill label="コク" value={String(pref.body)} />
+          <ConditionPill label="アロマ" value={String(pref.aroma)} />
+        </div>
+      </div>
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            void onPatch({ body: 2, note: "もう少し軽めにしたい" })
+          }
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+        >
+          軽めにする
+        </button>
+        <button
+          type="button"
+          onClick={() => void onPatch({ acidity: 1, note: "酸味を弱めたい" })}
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+        >
+          酸味を弱める
+        </button>
+        <button
+          type="button"
+          onClick={() => void onPatch({ bitterness: 5, note: "苦めがよい" })}
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+        >
+          苦め
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            void onPatch({ method: "milk", note: "ミルクに合うものがよい" })
+          }
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+        >
+          ミルク向け
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            void onPatch({
+              method: "iced",
+              temp_pref: "ice",
+              note: "アイスで飲みたい",
+            })
+          }
+          className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
+        >
+          アイス向け
+        </button>
+      </div>
+    </section>
+  ) : null;
+
   return (
     <main className="mx-auto max-w-[1440px] px-4 py-8 md:px-8">
       <section className="mb-8 overflow-hidden rounded-[36px] border border-[#eadfd4] bg-white shadow-[0_16px_40px_rgba(110,78,56,0.08)]">
@@ -996,11 +1215,110 @@ export function ConciergePage() {
               <textarea
                 value={chatText}
                 onChange={(event) => setChatText(event.target.value)}
-                rows={5}
+                rows={1}
                 placeholder="例: 朝に軽めで飲みたい。酸味は弱めで、ミルクにも合うもの。"
                 className="w-full rounded-2xl border border-[#dfcfc2] bg-white px-4 py-3 text-sm font-bold leading-7 text-[#4e342e] outline-none transition focus:border-[#7b523a] focus:ring-4 focus:ring-[#eadfd5]"
               />
             </FieldShell>
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowDetail((current) => !current)}
+                className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#d8c5b8] bg-white px-5 py-2 text-sm font-black text-[#7b523a] transition hover:bg-[#f8efe7]"
+              >
+                {showDetail ? "手動入力を閉じる" : "手動で入力する"}
+              </button>
+
+              {showDetail ? (
+                <div className="mt-4 rounded-[26px] border border-[#eadfd4] bg-white p-4">
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <ScoreField
+                      label="香り・風味"
+                      value={form.flavor}
+                      onChange={(value) => updateScore("flavor", value)}
+                    />
+                    <ScoreField
+                      label="酸味"
+                      value={form.acidity}
+                      onChange={(value) => updateScore("acidity", value)}
+                    />
+                    <ScoreField
+                      label="苦味"
+                      value={form.bitterness}
+                      onChange={(value) => updateScore("bitterness", value)}
+                    />
+                    <ScoreField
+                      label="コク"
+                      value={form.body}
+                      onChange={(value) => updateScore("body", value)}
+                    />
+                    <ScoreField
+                      label="アロマ"
+                      value={form.aroma}
+                      onChange={(value) => updateScore("aroma", value)}
+                    />
+                    <SelectField
+                      label="気分"
+                      value={form.mood}
+                      options={moodOptions}
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, mood: value }))
+                      }
+                    />
+                    <SelectField
+                      label="飲み方"
+                      value={form.method}
+                      options={methodOptions}
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, method: value }))
+                      }
+                    />
+                    <SelectField
+                      label="シーン"
+                      value={form.scene}
+                      options={sceneOptions}
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, scene: value }))
+                      }
+                    />
+                    <SelectField
+                      label="温度"
+                      value={form.temp_pref}
+                      options={tempOptions}
+                      onChange={(value) =>
+                        setForm((current) => ({ ...current, temp_pref: value }))
+                      }
+                    />
+                  </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_220px] lg:items-end">
+                    <FieldShell label="手動条件メモ">
+                      <textarea
+                        value={form.note}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            note: event.target.value,
+                          }))
+                        }
+                        rows={1}
+                        className="w-full rounded-2xl border border-[#dfcfc2] bg-white px-4 py-3 text-sm font-bold leading-7 text-[#4e342e] outline-none transition focus:border-[#7b523a] focus:ring-4 focus:ring-[#eadfd5]"
+                      />
+                    </FieldShell>
+
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void onStartFromDetail()}
+                      className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#4e342e] px-6 py-3 text-sm font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[#bca99c]"
+                    >
+                      {loading ? "検索中..." : "手動条件で検索"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
 
             <button
               type="button"
@@ -1065,182 +1383,11 @@ export function ConciergePage() {
             </div>
           </div>
         </div>
-      </section>
 
-      {pref ? (
-        <section className="mb-8 rounded-[32px] border border-[#eadfd4] bg-white p-5 shadow-[0_10px_28px_rgba(110,78,56,0.06)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="mb-2 text-xs font-black tracking-[0.24em] text-[#a1775b] uppercase">
-                current condition
-              </p>
-              <h3 className="text-2xl font-black text-[#4e342e]">
-                {moodLabel(pref.mood)} / {methodLabel(pref.method)} /{" "}
-                {sceneLabel(pref.scene)} / {tempPrefLabel(pref.temp_pref)}
-              </h3>
-              <p className="mt-2 text-sm font-semibold text-[#7a6b62]">
-                {pref.note || "補足メモなし"}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <ConditionPill label="香り" value={String(pref.flavor)} />
-              <ConditionPill label="酸味" value={String(pref.acidity)} />
-              <ConditionPill label="苦味" value={String(pref.bitterness)} />
-              <ConditionPill label="コク" value={String(pref.body)} />
-              <ConditionPill label="アロマ" value={String(pref.aroma)} />
-            </div>
-          </div>
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                void onPatch({ body: 2, note: "もう少し軽めにしたい" })
-              }
-              className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
-            >
-              軽めにする
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void onPatch({ acidity: 1, note: "酸味を弱めたい" })
-              }
-              className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
-            >
-              酸味を弱める
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void onPatch({ bitterness: 5, note: "苦めがよい" })
-              }
-              className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
-            >
-              苦め
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void onPatch({ method: "milk", note: "ミルクに合うものがよい" })
-              }
-              className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
-            >
-              ミルク向け
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void onPatch({
-                  method: "iced",
-                  temp_pref: "ice",
-                  note: "アイスで飲みたい",
-                })
-              }
-              className="rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#6f4e37]"
-            >
-              アイス向け
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="mb-8 rounded-[32px] border border-[#eadfd4] bg-white p-5 shadow-[0_10px_28px_rgba(110,78,56,0.06)]">
-        <button
-          type="button"
-          onClick={() => setShowDetail((current) => !current)}
-          className="inline-flex min-h-11 items-center justify-center rounded-full border border-[#d8c5b8] bg-white px-5 py-2 text-sm font-black text-[#7b523a] transition hover:bg-[#f8efe7]"
-        >
-          {showDetail ? "詳細条件を閉じる" : "詳細条件を開く"}
-        </button>
-
-        {showDetail ? (
-          <div className="mt-5 grid gap-6 lg:grid-cols-[1fr_0.7fr]">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              <ScoreField
-                label="香り・風味"
-                value={form.flavor}
-                onChange={(value) => updateScore("flavor", value)}
-              />
-              <ScoreField
-                label="酸味"
-                value={form.acidity}
-                onChange={(value) => updateScore("acidity", value)}
-              />
-              <ScoreField
-                label="苦味"
-                value={form.bitterness}
-                onChange={(value) => updateScore("bitterness", value)}
-              />
-              <ScoreField
-                label="コク"
-                value={form.body}
-                onChange={(value) => updateScore("body", value)}
-              />
-              <ScoreField
-                label="アロマ"
-                value={form.aroma}
-                onChange={(value) => updateScore("aroma", value)}
-              />
-              <SelectField
-                label="気分"
-                value={form.mood}
-                options={moodOptions}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, mood: value }))
-                }
-              />
-              <SelectField
-                label="飲み方"
-                value={form.method}
-                options={methodOptions}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, method: value }))
-                }
-              />
-              <SelectField
-                label="シーン"
-                value={form.scene}
-                options={sceneOptions}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, scene: value }))
-                }
-              />
-              <SelectField
-                label="温度"
-                value={form.temp_pref}
-                options={tempOptions}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, temp_pref: value }))
-                }
-              />
-            </div>
-
-            <div className="rounded-[30px] border border-[#eadfd4] bg-[#fffaf5] p-5">
-              <FieldShell label="詳細">
-                <textarea
-                  value={form.note}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      note: event.target.value,
-                    }))
-                  }
-                  rows={5}
-                  className="w-full rounded-2xl border border-[#dfcfc2] bg-white px-4 py-3 text-sm font-bold leading-7 text-[#4e342e] outline-none transition focus:border-[#7b523a] focus:ring-4 focus:ring-[#eadfd5]"
-                />
-              </FieldShell>
-
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => void onStartFromDetail()}
-                className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#4e342e] px-6 py-3 text-sm font-black text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:bg-[#bca99c]"
-              >
-                {loading ? "検索中..." : "詳細条件で検索"}
-              </button>
-            </div>
+        {currentConditionPanel || messagePanel ? (
+          <div className="space-y-5 px-6 pb-6 md:px-10">
+            {currentConditionPanel}
+            {messagePanel}
           </div>
         ) : null}
       </section>
@@ -1250,25 +1397,41 @@ export function ConciergePage() {
           {error}
         </div>
       ) : null}
-      {message ? (
-        <div className="mb-6 rounded-3xl border border-[#cfe1c8] bg-[#f5fff2] px-5 py-4 text-sm font-bold text-[#3f6b36]">
-          {message}
-        </div>
-      ) : null}
-
-      <section className="space-y-5">
+      <section ref={resultRef} className="scroll-mt-8 space-y-5">
         {result && suggestions.length > 0 ? (
-          suggestions.map((suggestion) => (
-            <SuggestionCard
-              key={suggestion.id}
-              suggestion={suggestion}
-              result={result}
-              canSave={canSaveSuggestion}
-              savingID={savingID}
-              savedIDs={savedIDs}
-              onToggleSave={onToggleSave}
-            />
-          ))
+          <div className="space-y-5">
+            <div className="rounded-[32px] border border-[#eadfd4] bg-white px-5 py-5 shadow-[0_12px_30px_rgba(110,78,56,0.06)]">
+              <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-black tracking-[0.24em] text-[#a1775b] uppercase">
+                    ranking result
+                  </p>
+                  <h2 className="mt-1 text-2xl font-black text-[#4e342e]"></h2>
+                </div>
+                <span className="w-fit rounded-full bg-[#f3e7dc] px-4 py-2 text-sm font-black text-[#7b523a]">
+                  {suggestions.length}件
+                </span>
+              </div>
+
+              <div className="overflow-hidden rounded-[22px] border border-[#eadfd4] bg-white">
+                {suggestions.map((suggestion, index) => (
+                  <SuggestionRow
+                    key={suggestion.id}
+                    suggestion={suggestion}
+                    result={result}
+                    displayRank={index + 1}
+                    selected={
+                      selectedSuggestion?.id === suggestion.id && detailOpen
+                    }
+                    onSelect={(id) => {
+                      setSelectedSuggestionID(id);
+                      setDetailOpen(true);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="rounded-[32px] border border-dashed border-[#d8c5b8] bg-white px-6 py-12 text-center">
             <h3 className="text-2xl font-black text-[#4e342e]">
@@ -1280,6 +1443,18 @@ export function ConciergePage() {
           </div>
         )}
       </section>
+
+      <SuggestionDetailModal
+        open={detailOpen}
+        suggestion={selectedSuggestion}
+        result={result}
+        displayRank={selectedDisplayRank}
+        canSave={canSaveSuggestion}
+        savingID={savingID}
+        savedIDs={savedIDs}
+        onToggleSave={onToggleSave}
+        onClose={() => setDetailOpen(false)}
+      />
 
       {result?.followups && result.followups.length > 0 ? (
         <section className="mt-8 rounded-[32px] border border-[#eadfd4] bg-[#fffaf5] p-5">

@@ -93,7 +93,7 @@ func registerPublicAuthRoutes(
 }
 
 // 公開コンテンツ取得系routeをまとめる。
-// Item/Source/Bean/Recipeは閲覧系だけ publicへ。
+// Item/Source/Bean/Recipeは閲覧系だけpublicへ。
 func registerPublicContentRoutes(
 	g *echo.Group,
 	itemCtl *controller.ItemCtl,
@@ -123,12 +123,8 @@ func registerPublicSearchRoutes(
 	jwtSecret string,
 	userRepo middleware.TokenVersionReader,
 ) {
-	g.Use(middleware.OptionalJWTAuth(jwtSecret))
-	g.Use(middleware.OptionalTokenVersion(userRepo))
-
-	g.POST("/search/sessions", searchCtl.StartSession)
-	g.POST("/search/sessions/:id/pref", searchCtl.SetPref)
-	g.PATCH("/search/sessions/:id/pref", searchCtl.PatchPref)
+	_ = jwtSecret
+	_ = userRepo
 	g.GET("/search/guest/sessions/:id", middleware.SessionKeyHeaderRequired()(searchCtl.GetGuestSession))
 }
 
@@ -142,6 +138,10 @@ func registerPrivateRoutes(
 ) {
 	g.GET("/me", authCtl.Me)
 	g.POST("/auth/logout", authCtl.Logout)
+
+	g.POST("/search/sessions", searchCtl.StartSession)
+	g.POST("/search/sessions/:id/pref", searchCtl.SetPref)
+	g.PATCH("/search/sessions/:id/pref", searchCtl.PatchPref)
 
 	g.GET("/search/sessions", searchCtl.ListHistory)
 	g.GET("/search/sessions/:id", searchCtl.GetSession)

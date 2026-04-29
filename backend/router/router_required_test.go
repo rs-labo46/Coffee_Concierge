@@ -34,21 +34,21 @@ func (m *rateLimiterStub) result() (bool, int, error) {
 	}
 	return m.allowed, m.retryAfter, nil
 }
-func (m *rateLimiterStub) AllowSignup(ip string) (bool, int, error)          { return m.result() }
-func (m *rateLimiterStub) AllowLoginIP(ip string) (bool, int, error)         { return m.result() }
-func (m *rateLimiterStub) AllowLogin(emailHash string) (bool, int, error)    { return m.result() }
+func (m *rateLimiterStub) AllowSignup(ip string) (bool, int, error)       { return m.result() }
+func (m *rateLimiterStub) AllowLoginIP(ip string) (bool, int, error)      { return m.result() }
+func (m *rateLimiterStub) AllowLogin(emailHash string) (bool, int, error) { return m.result() }
 func (m *rateLimiterStub) AllowRefreshToken(tokenHash string) (bool, int, error) {
 	return m.result()
 }
-func (m *rateLimiterStub) AllowResendIP(ip string) (bool, int, error)        { return m.result() }
+func (m *rateLimiterStub) AllowResendIP(ip string) (bool, int, error) { return m.result() }
 func (m *rateLimiterStub) AllowResendMail(emailHash string) (bool, int, error) {
 	return m.result()
 }
-func (m *rateLimiterStub) AllowForgotIP(ip string) (bool, int, error)        { return m.result() }
+func (m *rateLimiterStub) AllowForgotIP(ip string) (bool, int, error) { return m.result() }
 func (m *rateLimiterStub) AllowForgotMail(emailHash string) (bool, int, error) {
 	return m.result()
 }
-func (m *rateLimiterStub) AllowWS(key string) (bool, int, error)             { return m.result() }
+func (m *rateLimiterStub) AllowWS(key string) (bool, int, error) { return m.result() }
 
 type authUCStub struct{}
 
@@ -62,10 +62,10 @@ func (authUCStub) Login(in usecase.LoginIn) (usecase.LoginOut, error) {
 func (authUCStub) Refresh(in usecase.RefreshIn) (usecase.RefreshOut, error) {
 	return usecase.RefreshOut{User: entity.User{ID: 1, Role: entity.RoleUser}, AccessToken: "access", RefreshToken: "refresh"}, nil
 }
-func (authUCStub) ResendVerify(in usecase.ResendVerifyIn) error { return nil }
+func (authUCStub) ResendVerify(in usecase.ResendVerifyIn) error         { return nil }
 func (authUCStub) Logout(actor entity.Actor, refreshToken string) error { return nil }
-func (authUCStub) ForgotPw(in usecase.ForgotPwIn) error { return nil }
-func (authUCStub) ResetPw(in usecase.ResetPwIn) error { return nil }
+func (authUCStub) ForgotPw(in usecase.ForgotPwIn) error                 { return nil }
+func (authUCStub) ResetPw(in usecase.ResetPwIn) error                   { return nil }
 func (authUCStub) Me(actor entity.Actor) (entity.User, error) {
 	return entity.User{ID: actor.UserID, Role: actor.Role, TokenVer: actor.TokenVer}, nil
 }
@@ -88,7 +88,9 @@ type sourceUCStub struct{}
 func (sourceUCStub) Create(actor entity.Actor, in usecase.CreateSourceIn) (entity.Source, error) {
 	return entity.Source{ID: 1, Name: in.Name, SiteURL: in.SiteURL}, nil
 }
-func (sourceUCStub) Get(id uint) (entity.Source, error) { return entity.Source{ID: id, Name: "source"}, nil }
+func (sourceUCStub) Get(id uint) (entity.Source, error) {
+	return entity.Source{ID: id, Name: "source"}, nil
+}
 func (sourceUCStub) List(limit int, offset int) ([]entity.Source, error) {
 	return []entity.Source{{ID: 1, Name: "source"}}, nil
 }
@@ -114,7 +116,9 @@ func (recipeUCStub) Create(actor entity.Actor, in usecase.CreateRecipeIn) (entit
 func (recipeUCStub) Update(actor entity.Actor, in usecase.UpdateRecipeIn) (entity.Recipe, error) {
 	return entity.Recipe{ID: in.ID, BeanID: in.BeanID, Name: in.Name}, nil
 }
-func (recipeUCStub) Get(id uint) (entity.Recipe, error) { return entity.Recipe{ID: id, Name: "recipe"}, nil }
+func (recipeUCStub) Get(id uint) (entity.Recipe, error) {
+	return entity.Recipe{ID: id, Name: "recipe"}, nil
+}
 func (recipeUCStub) List(in usecase.RecipeListIn) ([]entity.Recipe, error) {
 	return []entity.Recipe{{ID: 1, Name: "recipe"}}, nil
 }
@@ -199,7 +203,9 @@ func TestRouter_RequiredRoutesAndProtection(t *testing.T) {
 		{name: "public sources registered", method: http.MethodGet, path: "/sources", want: http.StatusOK},
 		{name: "private me requires jwt", method: http.MethodGet, path: "/me", want: http.StatusUnauthorized},
 		{name: "admin items requires jwt before handler", method: http.MethodPost, path: "/admin/items", want: http.StatusUnauthorized},
-		{name: "guest search pref requires session key", method: http.MethodPost, path: "/search/sessions/1/pref", want: http.StatusBadRequest},
+		{name: "search session start requires login without token", method: http.MethodPost, path: "/search/sessions", want: http.StatusUnauthorized},
+		{name: "pref requires login without token", method: http.MethodPost, path: "/search/sessions/1/pref", want: http.StatusUnauthorized},
+		{name: "patch pref requires login without token", method: http.MethodPatch, path: "/search/sessions/1/pref", want: http.StatusUnauthorized},
 		{name: "guest session detail requires session key", method: http.MethodGet, path: "/search/guest/sessions/1", want: http.StatusBadRequest},
 		{name: "refresh route protected by csrf", method: http.MethodPost, path: "/auth/refresh", want: http.StatusForbidden},
 	}

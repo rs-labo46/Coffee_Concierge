@@ -123,6 +123,8 @@ func (m Ranker) Rank(pref entity.Pref, beans []entity.Bean) ([]usecase.RankItem,
 type Gemini struct {
 	T                    *testing.T
 	BuildConditionDiffFn func(usecase.GeminiConditionDiffIn) (usecase.GeminiConditionDiffOut, usecase.GeminiAuditMeta, error)
+	SelectBeansFn        func(usecase.GeminiBeanSelectionIn) ([]usecase.GeminiBeanSelection, usecase.GeminiAuditMeta, error)
+	BuildSearchBundleFn  func(usecase.GeminiSearchBundleIn) (usecase.GeminiSearchBundleOut, usecase.GeminiAuditMeta, error)
 	BuildReasonsFn       func(usecase.GeminiReasonIn) ([]usecase.GeminiReason, usecase.GeminiAuditMeta, error)
 	BuildFollowupsFn     func(usecase.GeminiFollowupIn) ([]string, usecase.GeminiAuditMeta, error)
 }
@@ -137,6 +139,44 @@ func (m Gemini) BuildConditionDiff(in usecase.GeminiConditionDiffIn) (usecase.Ge
 		return usecase.GeminiConditionDiffOut{}, meta, nil
 	}
 	return m.BuildConditionDiffFn(in)
+}
+
+func (m Gemini) SelectBeans(in usecase.GeminiBeanSelectionIn) ([]usecase.GeminiBeanSelection, usecase.GeminiAuditMeta, error) {
+	meta := usecase.GeminiAuditMeta{Provider: "mock", Model: "mock-model", Status: "success"}
+	if m.SelectBeansFn == nil {
+		out := make([]usecase.GeminiBeanSelection, 0, len(in.Candidates))
+		limit := in.Limit
+		if limit <= 0 {
+			limit = 10
+		}
+		for _, bean := range in.Candidates {
+			out = append(out, usecase.GeminiBeanSelection{BeanID: bean.ID, Rank: len(out) + 1, Score: 90, Reason: "登録済み豆から選定しました。"})
+			if len(out) >= limit {
+				break
+			}
+		}
+		return out, meta, nil
+	}
+	return m.SelectBeansFn(in)
+}
+
+func (m Gemini) BuildSearchBundle(in usecase.GeminiSearchBundleIn) (usecase.GeminiSearchBundleOut, usecase.GeminiAuditMeta, error) {
+	meta := usecase.GeminiAuditMeta{Provider: "mock", Model: "mock-model", Status: "success"}
+	if m.BuildSearchBundleFn == nil {
+		limit := in.Limit
+		if limit <= 0 {
+			limit = 10
+		}
+		selections := make([]usecase.GeminiBeanSelection, 0, limit)
+		for _, bean := range in.Candidates {
+			selections = append(selections, usecase.GeminiBeanSelection{BeanID: bean.ID, Rank: len(selections) + 1, Score: 90, Reason: "登録済み豆から選定しました。"})
+			if len(selections) >= limit {
+				break
+			}
+		}
+		return usecase.GeminiSearchBundleOut{Selections: selections, Followups: []string{"もう少し軽めにしますか？"}}, meta, nil
+	}
+	return m.BuildSearchBundleFn(in)
 }
 
 func (m Gemini) BuildReasons(in usecase.GeminiReasonIn) ([]usecase.GeminiReason, usecase.GeminiAuditMeta, error) {

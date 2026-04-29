@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -92,6 +93,118 @@ func (s *Service) BuildConditionDiff(
 			DurationMS: time.Since(start).Milliseconds(),
 			ErrorType:  "",
 		}, nil
+}
+
+// 検索1回分のAI補助を1リクエストで生成する。
+// Bean選定、理由文、追加質問をまとめて返し、無料枠の消費を抑える。
+func (s *Service) BuildSearchBundle(
+	in usecase.GeminiSearchBundleIn,
+) (usecase.GeminiSearchBundleOut, usecase.GeminiAuditMeta, error) {
+	start := time.Now()
+
+	prompt := buildSearchBundlePrompt(in)
+
+	var out searchBundleResponse
+	if err := s.generateJSON(
+		searchBundleSystemInstruction,
+		prompt,
+		searchBundleSchema,
+		&out,
+	); err != nil {
+		return usecase.GeminiSearchBundleOut{}, usecase.GeminiAuditMeta{
+			Provider:   "gemini",
+			Model:      s.model,
+			Status:     "failed",
+			DurationMS: time.Since(start).Milliseconds(),
+			ErrorType:  "build_search_bundle_failed",
+		}, err
+	}
+
+	selections := make([]usecase.GeminiBeanSelection, 0, len(out.Selections))
+	for _, selection := range out.Selections {
+		reason := strings.TrimSpace(selection.Reason)
+		if selection.BeanID == 0 || selection.Rank <= 0 || selection.Score < 0 || selection.Score > 100 || reason == "" {
+			continue
+		}
+		selections = append(selections, usecase.GeminiBeanSelection{
+			BeanID: selection.BeanID,
+			Rank:   selection.Rank,
+			Score:  selection.Score,
+			Reason: reason,
+		})
+	}
+
+	followups := make([]string, 0, 3)
+	for _, q := range out.FollowupQuestions {
+		v := strings.TrimSpace(q)
+		if v == "" {
+			continue
+		}
+		followups = append(followups, v)
+		if len(followups) >= 3 {
+			break
+		}
+	}
+
+	return usecase.GeminiSearchBundleOut{
+			Selections: selections,
+			Followups:  followups,
+		}, usecase.GeminiAuditMeta{
+			Provider:   "gemini",
+			Model:      s.model,
+			Status:     "success",
+			DurationMS: time.Since(start).Milliseconds(),
+			ErrorType:  "",
+		}, nil
+}
+
+// 登録済みBean JSONの中から、Geminiに最大10件を選定させる。
+func (s *Service) SelectBeans(
+	in usecase.GeminiBeanSelectionIn,
+) ([]usecase.GeminiBeanSelection, usecase.GeminiAuditMeta, error) {
+	start := time.Now()
+
+	prompt := buildBeanSelectionPrompt(in)
+
+	var out beanSelectionListResponse
+	if err := s.generateJSON(
+		beanSelectionSystemInstruction,
+		prompt,
+		beanSelectionListSchema,
+		&out,
+	); err != nil {
+		return nil, usecase.GeminiAuditMeta{
+			Provider:   "gemini",
+			Model:      s.model,
+			Status:     "failed",
+			DurationMS: time.Since(start).Milliseconds(),
+			ErrorType:  "select_beans_failed",
+		}, err
+	}
+
+	results := make([]usecase.GeminiBeanSelection, 0, len(out.Selections))
+	for _, selection := range out.Selections {
+		if selection.BeanID == 0 || selection.Rank <= 0 || selection.Score < 0 || selection.Score > 100 {
+			continue
+		}
+		if strings.TrimSpace(selection.Reason) == "" {
+			continue
+		}
+		results = append(results, usecase.GeminiBeanSelection{
+			BeanID: selection.BeanID,
+			Rank:   selection.Rank,
+			Score:  selection.Score,
+			Reason: strings.TrimSpace(selection.Reason),
+		})
+	}
+
+	return results, usecase.GeminiAuditMeta{
+		Provider:   "gemini",
+		Model:      s.model,
+		Status:     "success",
+		DurationMS: time.Since(start).Milliseconds(),
+		ErrorType:  "",
+	}, nil
 }
 
 // suggestionごとの理由文を生成。
@@ -263,6 +376,11 @@ func (s *Service) generateJSON(
 	schema json.RawMessage,
 	dst interface{},
 ) error {
+	// Gemini API の responseJsonSchema は、モデルやAPI側のJSON Schema対応差分で
+	// INVALID_ARGUMENT になりやすい。MVPでは JSON mode に固定し、
+	// Go側の json.Unmarshal と usecase/validator で検証する。
+	_ = schema
+
 	reqBody := generateContentRequest{
 		SystemInstruction: content{
 			Parts: []part{
@@ -278,8 +396,7 @@ func (s *Service) generateJSON(
 			},
 		},
 		GenerationConfig: generationConfig{
-			ResponseMIMEType:   "application/json",
-			ResponseJSONSchema: schema,
+			ResponseMIMEType: "application/json",
 		},
 	}
 
@@ -300,6 +417,7 @@ func (s *Service) generateJSON(
 
 	res, err := s.httpClient.Do(req)
 	if err != nil {
+		log.Printf("[GEMINI] generateContent request failed: %v", err)
 		return err
 	}
 	defer res.Body.Close()
@@ -310,24 +428,45 @@ func (s *Service) generateJSON(
 	}
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("gemini status=%d body=%s", res.StatusCode, string(rawRes))
+		err := fmt.Errorf("gemini status=%d body=%s", res.StatusCode, string(rawRes))
+		log.Printf("[GEMINI] generateContent failed: %v", err)
+		return err
 	}
 
 	var gcRes generateContentResponse
 	if err := json.Unmarshal(rawRes, &gcRes); err != nil {
+		log.Printf("[GEMINI] response unmarshal failed: %v body=%s", err, string(rawRes))
 		return err
 	}
 
-	text := extractCandidateText(gcRes)
+	text := cleanJSONText(extractCandidateText(gcRes))
 	if strings.TrimSpace(text) == "" {
-		return errors.New("gemini returned empty JSON text")
+		err := errors.New("gemini returned empty JSON text")
+		log.Printf("[GEMINI] %v body=%s", err, string(rawRes))
+		return err
 	}
 
 	if err := json.Unmarshal([]byte(text), dst); err != nil {
+		log.Printf("[GEMINI] invalid JSON text: %v text=%s", err, text)
 		return fmt.Errorf("invalid gemini json: %w", err)
 	}
 
 	return nil
+}
+
+// cleanJSONTextは、JSON mode外の応答やモデル差分で混ざることがある
+// Markdown code fenceを取り除く。通常のJSON文字列はそのまま返す。
+func cleanJSONText(text string) string {
+	t := strings.TrimSpace(text)
+	if !strings.HasPrefix(t, "```") {
+		return t
+	}
+
+	t = strings.TrimPrefix(t, "```json")
+	t = strings.TrimPrefix(t, "```JSON")
+	t = strings.TrimPrefix(t, "```")
+	t = strings.TrimSuffix(t, "```")
+	return strings.TrimSpace(t)
 }
 
 // 最初の応答のcandidateからtextを抜く。
@@ -437,6 +576,22 @@ type conditionDiffResponse struct {
 	Note       *string          `json:"note"`
 }
 
+type searchBundleResponse struct {
+	Selections        []beanSelectionResponse `json:"selections"`
+	FollowupQuestions []string                `json:"followup_questions"`
+}
+
+type beanSelectionListResponse struct {
+	Selections []beanSelectionResponse `json:"selections"`
+}
+
+type beanSelectionResponse struct {
+	BeanID uint   `json:"bean_id"`
+	Rank   int    `json:"rank"`
+	Score  int    `json:"score"`
+	Reason string `json:"reason"`
+}
+
 type reasonListResponse struct {
 	Reasons []reasonResponse `json:"reasons"`
 }
@@ -465,6 +620,54 @@ var conditionDiffSchema = json.RawMessage(`{
     "excludes":{"type":"array","items":{"type":"string"}},
     "note":{"type":["string","null"]}
   },
+  "additionalProperties":false
+}`)
+
+var searchBundleSchema = json.RawMessage(`{
+  "type":"object",
+  "properties":{
+    "selections":{
+      "type":"array",
+      "items":{
+        "type":"object",
+        "properties":{
+          "bean_id":{"type":"integer"},
+          "rank":{"type":"integer","minimum":1},
+          "score":{"type":"integer","minimum":0,"maximum":100},
+          "reason":{"type":"string"}
+        },
+        "required":["bean_id","rank","score","reason"],
+        "additionalProperties":false
+      }
+    },
+    "followup_questions":{
+      "type":"array",
+      "items":{"type":"string"}
+    }
+  },
+  "required":["selections","followup_questions"],
+  "additionalProperties":false
+}`)
+
+var beanSelectionListSchema = json.RawMessage(`{
+  "type":"object",
+  "properties":{
+    "selections":{
+      "type":"array",
+      "items":{
+        "type":"object",
+        "properties":{
+          "bean_id":{"type":"integer"},
+          "rank":{"type":"integer","minimum":1},
+          "score":{"type":"integer","minimum":0,"maximum":100},
+          "reason":{"type":"string"}
+        },
+        "required":["bean_id","rank","score","reason"],
+        "additionalProperties":false
+      }
+    }
+  },
+  "required":["selections"],
   "additionalProperties":false
 }`)
 

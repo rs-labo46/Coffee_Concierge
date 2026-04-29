@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -16,6 +17,12 @@ Do not add keys not requested.
 Allowed keys:
 flavor, acidity, bitterness, body, aroma,
 mood, method, scene, temp_pref, excludes, note.
+Taste scale definitions:
+- flavor: overall sweetness, pleasant flavor impression, balance, and memorability. 1 is weak/plain, 3 is balanced/standard, 5 is very expressive or sweet-impression rich.
+- acidity: bright sourness, citrus, berry, and fruity sharpness. 1 is very low, 3 is moderate, 5 is very bright and acidic.
+- bitterness: bitter impression, roast bitterness, and dark chocolate-like sharpness. 1 is very low, 3 is moderate, 5 is very bitter.
+- body: weight, thickness, richness, and mouthfeel. 1 is very light, 3 is medium, 5 is heavy and rich.
+- aroma: fragrance intensity and aromatic impression. 1 is quiet, 3 is moderate, 5 is very aromatic.
 
 Rules:
 - flavor/acidity/bitterness/body/aroma are integers 1..5 if present.
@@ -27,39 +34,82 @@ Rules:
 - note is a short string.
 - note must be written in Japanese if present.
 - Omit keys you are not confident about.
-- Interpret common Japanese coffee preference expressions as condition hints.
-- If the user asks for "苦め","ブラック", "苦い", "ビター", "苦味強め", "苦味しっかり", "しっかり苦味", "苦味が欲しい", "苦味のある", "苦味を感じる", "パンチがある", "キリッと苦い", "深煎りっぽい苦さ", "大人っぽい苦味", or "甘くない苦味", set bitterness to 5.
-- If the user asks for "少し苦め", "やや苦め", "ほんのり苦い", "苦味も少し欲しい", or "苦味は中くらい", set bitterness to 4.
-- If the user asks for "苦味控えめ", "苦味弱め", "苦くない", "苦味少なめ", "苦味は少なく", "苦味を抑えたい", "苦すぎない", "苦いのは苦手", "苦味が苦手", "まろやか", "やさしい苦味", or "飲みやすい苦味", set bitterness to 1 or 2.
-- If the user asks for "酸味強め", "酸っぱい", "明るい酸味", "フルーティーな酸味", "爽やかな酸味", "華やかな酸味", "柑橘っぽい", "ベリーっぽい", "果実感", "フルーティー", or "明るい味", set acidity to 5.
-- If the user asks for "少し酸味", "酸味も少し", "酸味は中くらい", "ほどよい酸味", or "バランスのある酸味", set acidity to 3 or 4.
-- If the user asks for "酸味弱め", "酸味控えめ", "酸味少なめ", "酸っぱくない", "酸っぱいのは苦手", "酸味が苦手", "酸味を抑えたい", "酸味なし", or "まろやかな味", set acidity to 1 or 2.
-- If the user asks for "軽め", "すっきり", "さっぱり", "あっさり", "軽やか", "さらっと", "ごくごく飲める", "重くない", "飲み疲れしない", "朝に軽く", "透明感", or "クリーン", set body to 2.
-- If the user asks for "少しコク", "ほどよいコク", "中くらいのコク", "バランスのよいコク", or "飲みごたえも少し", set body to 3 or 4.
-- If the user asks for "重め", "どっしり", "深いコク", "濃厚", "しっかりしたコク", "飲みごたえ", "厚みがある", "力強い", "濃いめ", "深み", "余韻が長い", "リッチ", or "こってり", set body to 5.
-- If the user asks for "香り高い", "香りが強い", "香り重視", "華やか", "アロマ強め", "いい香り", "香ばしい香り", "フローラル", "花っぽい", "ナッツの香り", "チョコっぽい香り", or "香りを楽しみたい", set aroma to 5.
-- If the user asks for "香り控えめ", "香りは弱め", "香りは普通", or "香りより味重視", set aroma to 2 or 3.
-- If the user asks for "甘み", "甘い余韻", "甘さ", "ナッツ感", "チョコ感", "キャラメル感", "まろやかな甘み", "丸い味", "バランスがいい", or "飲みやすい", set flavor to 4 or 5.
-- If the user asks for "個性的", "特徴が強い", "クセがある", "変わった味", "印象に残る", or "複雑な味", set flavor to 5.
-- If the user asks for "普通", "無難", "クセが少ない", "シンプル", or "毎日飲める", set flavor to 3.
-- If the user asks for "朝", "朝に飲みたい", "起きた時", "目覚め", "眠気覚まし", "出勤前", or "朝食と一緒", set mood to "morning".
-- If the user asks for "仕事", "作業", "集中", "勉強", "デスクワーク", "仕事中", "作業用", "長時間飲む", or "PC作業", set mood to "work" and scene to "work".
-- If the user asks for "休憩", "一息", "気分転換", "昼休み", "午後の休憩", "リフレッシュ", or "ブレイク", set scene to "break".
-- If the user asks for "リラックス", "くつろぎ", "ゆっくり", "休日", "落ち着きたい", "癒されたい", "寝る前以外の夜", or "のんびり", set mood to "relax" and scene to "relax".
-- If the user asks for "夜", "夜に飲みたい", "寝る前", "夕食後", "夜の作業", or "夜向け", set mood to "night".
-- If the user asks for "食後", "ご飯の後", "食事の後", "デザートと一緒", "甘いものと", "スイーツと", or "ケーキと", set scene to "after_meal".
-- If the user asks for "ホット", "温かい", "あたたかい", "熱い", "冬", "寒い日", or "温まりたい", set temp_pref to "hot".
-- If the user asks for "アイス", "冷たい", "冷やして", "暑い日", "夏", "さっぱり冷たく", "氷", or "アイスコーヒー", set method to "iced" and temp_pref to "ice".
-- If the user asks for "ドリップ", "ハンドドリップ", "ペーパー", "家で淹れる", "ゆっくり淹れたい", or "ブラックで飲む", set method to "drip".
-- If the user asks for "エスプレッソ", "濃縮", "ラテのベース", "カフェラテ用", or "短時間で濃い", set method to "espresso".
-- If the user asks for "ミルク", "牛乳", "カフェラテ", "ラテ", "オレ", "ミルクに合う", "ミルク割り", "豆乳", "オーツミルク", or "ミルク向け", set method to "milk".
-- If the user asks for both "軽め" and "苦め", set bitterness to 5 and body to 2. Do not ignore either condition.
-- If the user asks for both "酸味弱め" and "フルーティー", prefer acidity 2 or 3 and flavor 4. Do not set acidity to 5 unless the user explicitly asks for strong acidity.
-- If the user asks for both "ミルク" and "苦め", set method to "milk" and bitterness to 5.
-- If the user asks for both "朝" and "すっきり", set mood to "morning" and body to 2.
-- If the user asks for both "夜" and "軽め", set mood to "night" and body to 2.
-- If the user says "苦すぎない", "酸っぱすぎない", "重すぎない", or similar "too much" expressions, avoid setting the corresponding score to 5.
+- Interpret Japanese coffee preference expressions by meaning, not by exact keyword matching.
+- Use the taste scale definitions to infer numeric values.
+- If the user gives multiple conditions, preserve all non-conflicting conditions.
+- If conditions conflict, prefer the latest explicit user input.
+- If the user says “not too bitter”, “not too sour”, “not too heavy”, or similar, do not set the corresponding score to 5.
 - Do not overwrite an existing preference unless the latest user input clearly changes it.
+`
+
+// 検索bundle生成用の固定ルール。Bean選定・理由文・追加質問を1回のGemini呼び出しで返す。
+const searchBundleSystemInstruction = `
+You are a search bundle generator for a coffee search engine.
+Return JSON only.
+Do not explain outside JSON.
+Select only from the provided registered beans.
+Never invent a bean, recipe, article, URL, ID, origin, or score.
+Return up to the requested limit.
+
+Output shape:
+{
+  "selections": [
+    {"bean_id": 1, "rank": 1, "score": 92, "reason": "..."}
+  ],
+  "followup_questions": ["..."]
+}
+
+Taste scale definitions:
+- flavor: overall sweetness, pleasant flavor impression, balance, and memorability. 1 is weak/plain, 5 is very expressive or sweet-impression rich.
+- acidity: bright sourness, citrus, berry, fruity sharpness. 1 is very low, 5 is very bright and acidic.
+- bitterness: bitter impression, roast bitterness, dark chocolate-like sharpness. 1 is very low, 5 is very bitter.
+- body: weight, thickness, richness, mouthfeel. 1 is light, 5 is heavy and rich.
+- aroma: fragrance intensity and aromatic impression. 1 is quiet, 5 is very aromatic.
+
+Selection rules:
+- Prioritize beans matching the user's current pref and latest input.
+- Score must be 0..100.
+- Rank must start at 1 and be unique.
+- Reason must be Japanese and grounded only in the provided bean JSON and current pref.
+- Each reason must mention at least two concrete matching points from roast, origin, flavor, acidity, bitterness, body, aroma, method, mood, scene, or temp_pref.
+- Do not use vague reason text like 「今の条件に近い候補です」 by itself.
+- If there are fewer suitable beans than the limit, return fewer.
+
+Followup rules:
+- followup_questions must be Japanese.
+- Return 0 to 3 questions.
+- Write each question in polite, natural Japanese for general coffee drinkers.
+- Keep each question to one sentence and short enough to display as a UI chip.
+- Use simple words that beginners can understand.
+- Avoid technical coffee jargon unless it is already provided by the user.
+- Ask only questions that help narrow the current coffee preference.
+- Prefer concrete preference questions about taste strength, acidity, bitterness, body, aroma, drinking scene, temperature, or brewing method.
+- Do not ask broad or unrelated questions.
+- Do not repeat a question that is already answered by the current pref or recent turns.
+`
+
+// 登録済みBean選定用の固定ルール。AIは渡された候補IDの中からだけ選ぶ。
+const beanSelectionSystemInstruction = `
+You are a bean selector for a coffee search engine.
+Return JSON only.
+Do not explain outside JSON.
+Select only from the provided registered beans.
+Never invent a bean, recipe, article, URL, ID, origin, or score.
+Return up to the requested limit.
+
+Taste scale definitions:
+- flavor: overall sweetness, pleasant flavor impression, balance, and memorability. 1 is weak/plain, 5 is very expressive or sweet-impression rich.
+- acidity: bright sourness, citrus, berry, fruity sharpness. 1 is very low, 5 is very bright and acidic.
+- bitterness: bitter impression, roast bitterness, dark chocolate-like sharpness. 1 is very low, 5 is very bitter.
+- body: weight, thickness, richness, mouthfeel. 1 is light, 5 is heavy and rich.
+- aroma: fragrance intensity and aromatic impression. 1 is quiet, 5 is very aromatic.
+
+Selection rules:
+- Prioritize beans matching the user's current pref and latest input.
+- Score must be 0..100.
+- Rank must start at 1 and be unique.
+- Reason must be Japanese and grounded only in the provided bean JSON and current pref.
+- If there are fewer suitable beans than the limit, return fewer.
 `
 
 // 候補理由文生成用の固定ルール。
@@ -73,12 +123,19 @@ Each candidate must have:
 Language rules:
 - Write every reason in Japanese.
 - Do not use English unless it is a proper noun already provided, such as a bean name, origin, recipe name, or method value.
-- Keep the Japanese natural, concise, and suitable for a consumer coffee app.
+- Write in polite, natural Japanese for general coffee drinkers.
+- Use simple words that beginners can understand.
+- Avoid overly technical cupping terms unless they are already provided.
+- Explain why the bean matches the user's preference, not just that it matches.
+- Keep each reason to 1 or 2 sentences.
+- Do not sound like an advertisement or a sales message.
 - Each reason must be a complete Japanese sentence ending with "です。" or "ます。".
 
 Rules:
 - Reason must be grounded only in the provided candidate summary, pref, and recent turns.
 - Do not invent beans, recipes, articles, or facts.
+- Mention at least two concrete matching points from the candidate values, such as roast, origin, acidity, bitterness, body, aroma, method, or recipe.
+- Avoid vague phrases like 「今の条件に近い候補です」 unless you also explain which condition matched.
 - Keep each reason concise and readable.
 `
 
@@ -91,11 +148,20 @@ Output only the next questions needed to narrow the search.
 Language rules:
 - Write every question in Japanese.
 - Do not use English unless it is a proper noun already provided.
-- Use short, natural Japanese suitable for a consumer coffee app.
+- Write questions in polite, natural Japanese for general coffee drinkers.
+- Keep each question to one sentence.
+- Use simple words that beginners can understand.
+- Avoid technical coffee jargon unless it is already provided by the user.
+- Do not sound like an advertisement or a sales message.
+- Ask in a helpful concierge tone, not a casual chatbot tone.
 
 Rules:
+- Return 0 to 3 questions.
+- Ask only questions that help narrow the current coffee preference.
+- Prefer concrete preference questions about taste strength, acidity, bitterness, body, aroma, drinking scene, temperature, or brewing method.
 - Do not ask broad or unrelated questions.
-- Keep questions short.
+- Do not repeat a question that is already answered by the current pref or recent turns.
+- Keep questions short enough to display as UI chips.
 `
 
 // 条件差分生成用のuser prompt。
@@ -128,12 +194,101 @@ func buildConditionDiffPrompt(in usecase.ParseConditionDiffIn) string {
 	return b.String()
 }
 
+// 検索bundle生成用のuser prompt。Bean候補JSON、現在条件、ユーザー入力を1回で渡す。
+func buildSearchBundlePrompt(in usecase.GeminiSearchBundleIn) string {
+	var b strings.Builder
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	b.WriteString("Return JSON only. Select registered beans and generate reasons and followup questions.\n")
+	b.WriteString(fmt.Sprintf("Limit: %d\n", limit))
+	b.WriteString("Current pref:\n")
+	b.WriteString(fmt.Sprintf(
+		`{"flavor":%d,"acidity":%d,"bitterness":%d,"body":%d,"aroma":%d,"mood":"%s","method":"%s","scene":"%s","temp_pref":"%s","note":"%s"}`+"\n",
+		in.Pref.Flavor,
+		in.Pref.Acidity,
+		in.Pref.Bitterness,
+		in.Pref.Body,
+		in.Pref.Aroma,
+		in.Pref.Mood,
+		in.Pref.Method,
+		in.Pref.Scene,
+		in.Pref.TempPref,
+		strings.ReplaceAll(in.Pref.Note, `"`, `'`),
+	))
+
+	b.WriteString("Recent turns:\n")
+	for _, t := range in.Turns {
+		b.WriteString(fmt.Sprintf("- role=%s body=%s\n", t.Role, t.Body))
+	}
+
+	b.WriteString("Latest user input:\n")
+	b.WriteString(in.InputText)
+	b.WriteString("\n")
+
+	b.WriteString("Registered bean candidates JSON:\n")
+	raw, err := json.Marshal(in.Candidates)
+	if err != nil {
+		b.WriteString("[]")
+		return b.String()
+	}
+	b.Write(raw)
+	return b.String()
+}
+
+// 登録済みBean候補選定用のuser prompt。
+func buildBeanSelectionPrompt(in usecase.GeminiBeanSelectionIn) string {
+	var b strings.Builder
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	b.WriteString("Return JSON only. Select registered beans from candidates.\n")
+	b.WriteString(fmt.Sprintf("Limit: %d\n", limit))
+	b.WriteString("Current pref:\n")
+	b.WriteString(fmt.Sprintf(
+		`{"flavor":%d,"acidity":%d,"bitterness":%d,"body":%d,"aroma":%d,"mood":"%s","method":"%s","scene":"%s","temp_pref":"%s","note":"%s"}`+"\n",
+		in.Pref.Flavor,
+		in.Pref.Acidity,
+		in.Pref.Bitterness,
+		in.Pref.Body,
+		in.Pref.Aroma,
+		in.Pref.Mood,
+		in.Pref.Method,
+		in.Pref.Scene,
+		in.Pref.TempPref,
+		strings.ReplaceAll(in.Pref.Note, `"`, `'`),
+	))
+
+	b.WriteString("Recent turns:\n")
+	for _, t := range in.Turns {
+		b.WriteString(fmt.Sprintf("- role=%s body=%s\n", t.Role, t.Body))
+	}
+
+	b.WriteString("Latest user input:\n")
+	b.WriteString(in.InputText)
+	b.WriteString("\n")
+
+	b.WriteString("Registered bean candidates JSON:\n")
+	raw, err := json.Marshal(in.Candidates)
+	if err != nil {
+		b.WriteString("[]")
+		return b.String()
+	}
+	b.Write(raw)
+	return b.String()
+}
+
 // 理由文生成用のuser prompt。
 func buildReasonsPrompt(in usecase.BuildReasonsIn) string {
 	var b strings.Builder
 	b.WriteString("Output language: Japanese only. Return JSON only.\n")
-	b.WriteString("Each reason must be one complete Japanese sentence ending with です。 or ます。\n")
-	b.WriteString("Explain why the displayed bean matches the current pref, using only the values in the same candidate line.\n")
+	b.WriteString("Each reason must be one or two complete Japanese sentences ending with です。 or ます。\n")
+	b.WriteString("Explain why the displayed bean matches the current pref, using roast/origin and at least two taste values from the same candidate line.\n")
+	b.WriteString("Avoid vague phrases like 今の条件に近い候補です unless you explain which condition matched.\n")
 	b.WriteString("Do not describe another bean. Do not invent facts not present in the candidate line.\n")
 	b.WriteString("Current pref:\n")
 	b.WriteString(fmt.Sprintf(

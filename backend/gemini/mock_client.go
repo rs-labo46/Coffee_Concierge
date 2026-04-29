@@ -190,6 +190,88 @@ func (m *MockClient) BuildConditionDiff(
 	}, nil
 }
 
+// 検索bundleをモックで返す。Bean選定、理由文、追加質問を1回で返す。
+func (m *MockClient) BuildSearchBundle(
+	in usecase.GeminiSearchBundleIn,
+) (usecase.GeminiSearchBundleOut, usecase.GeminiAuditMeta, error) {
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	selections := make([]usecase.GeminiBeanSelection, 0, limit)
+	for _, bean := range in.Candidates {
+		if bean.ID == 0 {
+			continue
+		}
+		score := 100 - absInt(in.Pref.Flavor-bean.Flavor)*4 - absInt(in.Pref.Acidity-bean.Acidity)*4 - absInt(in.Pref.Bitterness-bean.Bitterness)*4 - absInt(in.Pref.Body-bean.Body)*4 - absInt(in.Pref.Aroma-bean.Aroma)*4
+		if score < 0 {
+			score = 0
+		}
+		selections = append(selections, usecase.GeminiBeanSelection{
+			BeanID: bean.ID,
+			Rank:   len(selections) + 1,
+			Score:  score,
+			Reason: bean.Name + " は、" + string(bean.Roast) + "の焙煎と味覚バランスが現在の条件に合いやすい候補です。",
+		})
+		if len(selections) >= limit {
+			break
+		}
+	}
+
+	return usecase.GeminiSearchBundleOut{
+			Selections: selections,
+			Followups: []string{
+				"酸味はもう少し控えめが好みですか？",
+				"ホットとアイスならどちらで飲みたいですか？",
+			},
+		}, usecase.GeminiAuditMeta{
+			Provider:   "gemini_mock",
+			Model:      "mock",
+			Status:     "success",
+			DurationMS: 0,
+			ErrorType:  "",
+		}, nil
+}
+
+// 登録済みBean候補から、モックでは入力順に最大Limit件を返す。
+func (m *MockClient) SelectBeans(
+	in usecase.GeminiBeanSelectionIn,
+) ([]usecase.GeminiBeanSelection, usecase.GeminiAuditMeta, error) {
+	limit := in.Limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	out := make([]usecase.GeminiBeanSelection, 0, limit)
+	for _, bean := range in.Candidates {
+		if bean.ID == 0 {
+			continue
+		}
+		score := 100 - absInt(in.Pref.Flavor-bean.Flavor)*4 - absInt(in.Pref.Acidity-bean.Acidity)*4 - absInt(in.Pref.Bitterness-bean.Bitterness)*4 - absInt(in.Pref.Body-bean.Body)*4 - absInt(in.Pref.Aroma-bean.Aroma)*4
+		if score < 0 {
+			score = 0
+		}
+		out = append(out, usecase.GeminiBeanSelection{
+			BeanID: bean.ID,
+			Rank:   len(out) + 1,
+			Score:  score,
+			Reason: bean.Name + " は、登録済み豆の中で現在の条件に近い候補です。",
+		})
+		if len(out) >= limit {
+			break
+		}
+	}
+
+	return out, usecase.GeminiAuditMeta{
+		Provider:   "gemini_mock",
+		Model:      "mock",
+		Status:     "success",
+		DurationMS: 0,
+		ErrorType:  "",
+	}, nil
+}
+
 // suggestionごとの簡単な理由文を返す。
 // ExplainLevelに応じて少し文体を変える。
 func (m *MockClient) BuildReasons(
@@ -270,6 +352,13 @@ func clampScore(v int) int {
 	}
 	if v > 5 {
 		return 5
+	}
+	return v
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
 	}
 	return v
 }

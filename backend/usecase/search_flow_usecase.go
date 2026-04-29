@@ -723,14 +723,128 @@ func (u *searchFlowUsecase) buildFollowups(
 	return qs
 }
 
-// prefを使ってsuggestions / beans / recipes / items / followupsを組み立てる。
-func (u *searchFlowUsecase) buildResult(pref entity.Pref, requestID string, userID *uint) (SearchResult, error) {
-	beanList, err := u.beans.SearchByPref(pref, 10)
+// selectBeansは、登録済みの公開Bean JSONをGeminiへ渡し、Bean選定・理由文・追加質問を1回で生成させる。
+// Geminiが失敗した場合や不正値だけを返した場合は、Go側ランキングへフォールバックする。
+func (u *searchFlowUsecase) selectBeans(
+	pref entity.Pref,
+	requestID string,
+	userID *uint,
+) ([]RankItem, []entity.Bean, []string, error) {
+	active := true
+	allBeans, err := u.beans.List(repository.BeanListQ{
+		Active: &active,
+		Limit:  100,
+		Offset: 0,
+	})
 	if err != nil {
-		return SearchResult{}, err
+		return nil, nil, nil, err
 	}
 
-	ranked, err := u.rankBeans(pref, beanList)
+	fallbackBeans, err := u.beans.SearchByPref(pref, 10)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	fallback, err := u.rankBeans(pref, fallbackBeans)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if u.gemini == nil || len(allBeans) == 0 {
+		return fallback, allBeans, []string{}, nil
+	}
+
+	provider, model := u.aiInfo()
+	u.writeAudit(
+		"ai.request",
+		userID,
+		map[string]string{
+			"request_id": requestID,
+			"session_id": uintToStr(pref.SessionID),
+			"provider":   provider,
+			"model":      model,
+			"mode":       "search_bundle",
+		},
+	)
+
+	bundle, meta, err := u.gemini.BuildSearchBundle(GeminiSearchBundleIn{
+		InputText:  pref.Note,
+		Pref:       pref,
+		Turns:      nil,
+		Candidates: beanToGeminiCandidates(allBeans),
+		Limit:      10,
+	})
+	if err != nil {
+		u.writeAudit(
+			"ai.failed",
+			userID,
+			map[string]string{
+				"request_id":  requestID,
+				"session_id":  uintToStr(pref.SessionID),
+				"provider":    meta.Provider,
+				"model":       meta.Model,
+				"mode":        "search_bundle",
+				"duration_ms": strconv.FormatInt(meta.DurationMS, 10),
+				"error_type":  meta.ErrorType,
+			},
+		)
+		u.writeAudit(
+			"ai.fallback",
+			userID,
+			map[string]string{
+				"request_id":    requestID,
+				"session_id":    uintToStr(pref.SessionID),
+				"provider":      meta.Provider,
+				"model":         meta.Model,
+				"mode":          "search_bundle",
+				"fallback_type": "go_ranker",
+				"reason":        "gemini_build_search_bundle_failed",
+			},
+		)
+		return fallback, allBeans, []string{}, nil
+	}
+
+	selected := applyBeanSelections(fallback, allBeans, bundle.Selections, 10)
+	if len(selected) == 0 {
+		u.writeAudit(
+			"ai.fallback",
+			userID,
+			map[string]string{
+				"request_id":    requestID,
+				"session_id":    uintToStr(pref.SessionID),
+				"provider":      meta.Provider,
+				"model":         meta.Model,
+				"mode":          "search_bundle",
+				"fallback_type": "go_ranker",
+				"reason":        "empty_valid_selection",
+			},
+		)
+		return fallback, allBeans, limitStrings(bundle.Followups, 3), nil
+	}
+
+	followups := limitStrings(bundle.Followups, 3)
+	u.writeAudit(
+		"ai.success",
+		userID,
+		map[string]string{
+			"request_id":      requestID,
+			"session_id":      uintToStr(pref.SessionID),
+			"provider":        meta.Provider,
+			"model":           meta.Model,
+			"mode":            "search_bundle",
+			"status":          meta.Status,
+			"duration_ms":     strconv.FormatInt(meta.DurationMS, 10),
+			"selection_count": strconv.Itoa(len(selected)),
+			"followup_count":  strconv.Itoa(len(followups)),
+		},
+	)
+
+	return selected, allBeans, followups, nil
+}
+
+// prefを使ってsuggestions / beans / recipes / items / followupsを組み立てる。
+func (u *searchFlowUsecase) buildResult(pref entity.Pref, requestID string, userID *uint) (SearchResult, error) {
+	ranked, _, followups, err := u.selectBeans(pref, requestID, userID)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -785,8 +899,7 @@ func (u *searchFlowUsecase) buildResult(pref entity.Pref, requestID string, user
 		})
 	}
 
-	u.fillSuggestionReasons(pref, &suggestions, beans, recipes, items, requestID, userID)
-	followups := u.buildFollowups(pref, beans, requestID, userID)
+	// Gemini理由文と追加質問はsearch_bundleで1回生成済み。
 	if err := u.sessions.ReplaceSuggestions(pref.SessionID, suggestions); err != nil {
 		return SearchResult{}, err
 	}
