@@ -121,7 +121,7 @@ func (ctl *AuthCtl) Csrf(c echo.Context) error {
 		MaxAge:   authCSRFCookieMaxAgeSec(),
 		HttpOnly: false,
 		Secure:   authCookieSecure(),
-		SameSite: http.SameSiteLaxMode,
+		SameSite: authCookieSameSite(),
 		Domain:   authCookieDomain(),
 	})
 
@@ -261,7 +261,7 @@ func (ctl *AuthCtl) Login(c echo.Context) error {
 		out.RefreshToken,
 		authRefreshCookieMaxAgeSec(),
 		authCookieSecure(),
-		http.SameSiteLaxMode,
+		authCookieSameSite(),
 		refreshCookiePath,
 		authCookieDomain(),
 	)
@@ -303,7 +303,7 @@ func (ctl *AuthCtl) Refresh(c echo.Context) error {
 		out.RefreshToken,
 		authRefreshCookieMaxAgeSec(),
 		authCookieSecure(),
-		http.SameSiteLaxMode,
+		authCookieSameSite(),
 		refreshCookiePath,
 		authCookieDomain(),
 	)
@@ -335,7 +335,7 @@ func (ctl *AuthCtl) Logout(c echo.Context) error {
 		c,
 		refreshCookieName,
 		authCookieSecure(),
-		http.SameSiteLaxMode,
+		authCookieSameSite(),
 		refreshCookiePath,
 		authCookieDomain(),
 	)
@@ -462,6 +462,15 @@ func authCSRFCookieMaxAgeSec() int {
 func authCookieSecure() bool {
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SECURE")))
 	return v == "1" || v == "true" || v == "yes"
+}
+
+// 本番のVercel→Renderのような別ドメイン通信では、Cookieを送るためにSameSite=Noneが必要
+func authCookieSameSite() http.SameSite {
+	if authCookieSecure() {
+		return http.SameSiteNoneMode
+	}
+
+	return http.SameSiteLaxMode
 }
 
 // cookieのdomainを返す。未指定なら空文字のままに。
