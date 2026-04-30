@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -1066,6 +1067,11 @@ func (u *searchFlowUsecase) writeAudit(
 	userID *uint,
 	meta map[string]string,
 ) {
+	if strings.HasPrefix(typ, "ai.") {
+		metaJSON, _ := json.Marshal(meta)
+		log.Printf("[AI][AUDIT] kind=%s meta=%s", typ, string(metaJSON))
+	}
+
 	if u.audits == nil {
 		return
 	}
