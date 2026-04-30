@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"coffee-spa/db"
 
@@ -64,9 +67,30 @@ func main() {
 	adminEmail := envRequired("SEED_ADMIN_EMAIL")
 	adminPassword := envRequired("SEED_ADMIN_PASSWORD")
 
-	g, err := gorm.Open(postgres.Open(buildPostgresDSN()), &gorm.Config{})
+	dsn := buildPostgresDSN()
+
+	sqlDB, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatal(fmt.Errorf("open postgres: %w", err))
+		log.Fatal(fmt.Errorf("open postgres driver: %w", err))
+	}
+	defer sqlDB.Close()
+
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if err := sqlDB.PingContext(ctx); err != nil {
+		log.Fatal(fmt.Errorf("ping postgres: %w", err))
+	}
+
+	g, err := gorm.Open(postgres.New(postgres.Config{
+		Conn: sqlDB,
+	}), &gorm.Config{})
+	if err != nil {
+		log.Fatal(fmt.Errorf("open gorm: %w", err))
 	}
 
 	if err := db.SeedDev(g, adminEmail, adminPassword); err != nil {
