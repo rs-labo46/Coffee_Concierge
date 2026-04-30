@@ -55,7 +55,6 @@ func buildPostgresDSN() string {
 
 	q := u.Query()
 	q.Set("sslmode", sslMode)
-	q.Set("TimeZone", "Asia/Tokyo")
 	u.RawQuery = q.Encode()
 
 	return u.String()
