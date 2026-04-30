@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/auth/:path*",
+      "destination": "https://coffee-concierge-api.onrender.com/auth/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
