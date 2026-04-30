@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/use-auth";
 import { ApiError, toErrorMessage } from "../lib/api";
@@ -722,6 +729,52 @@ export function ConciergePage() {
       wsRef.current?.close();
     };
   }, []);
+  const addTurn = useCallback((role: LocalTurn["role"], body: string) => {
+    setTurns((current) => [
+      ...current,
+      { id: Date.now() + current.length, role, body },
+    ]);
+  }, []);
+
+  const scrollToResults = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        resultRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
+  }, []);
+
+  const connectGuestWs = useCallback(
+    (targetSessionID: number, targetSessionKey: string) => {
+      const client = new ConciergeWsClient({
+        onStatus: setWsStatus,
+        onResult: (nextResult) => {
+          setResult(nextResult);
+          addTurn(
+            "system",
+            "WebSocketで会話内容を反映して候補を更新しました。",
+          );
+          setMessage("会話内容をもとに候補を更新しました。");
+          scrollToResults();
+        },
+        onError: (msg) => {
+          setError(msg);
+          setLoading(false);
+        },
+        onDone: () => {
+          setLoading(false);
+        },
+      });
+
+      wsRef.current = client;
+      client.connectGuest(targetSessionID, targetSessionKey);
+    },
+    [addTurn, scrollToResults],
+  );
+
   useEffect(() => {
     const stored = loadConciergeState();
 
@@ -749,7 +802,7 @@ export function ConciergePage() {
     if (!loggedIn && stored.sessionKey.trim() !== "") {
       connectGuestWs(stored.session.id, stored.sessionKey);
     }
-  }, [loggedIn]);
+  }, [loggedIn, connectGuestWs]);
 
   useEffect(() => {
     if (!session || !result) {
@@ -768,46 +821,6 @@ export function ConciergePage() {
       savedAt: Date.now(),
     });
   }, [session, sessionKey, pref, result, turns, savedIDs, chatText, loggedIn]);
-
-  function addTurn(role: LocalTurn["role"], body: string) {
-    setTurns((current) => [
-      ...current,
-      { id: Date.now() + current.length, role, body },
-    ]);
-  }
-
-  function scrollToResults() {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        resultRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      });
-    });
-  }
-
-  function connectGuestWs(targetSessionID: number, targetSessionKey: string) {
-    const client = new ConciergeWsClient({
-      onStatus: setWsStatus,
-      onResult: (nextResult) => {
-        setResult(nextResult);
-        addTurn("system", "WebSocketで会話内容を反映して候補を更新しました。");
-        setMessage("会話内容をもとに候補を更新しました。");
-        scrollToResults();
-      },
-      onError: (msg) => {
-        setError(msg);
-        setLoading(false);
-      },
-      onDone: () => {
-        setLoading(false);
-      },
-    });
-
-    wsRef.current = client;
-    client.connectGuest(targetSessionID, targetSessionKey);
-  }
 
   async function startWithInput(input: SetPrefInput, userText: string) {
     clearConciergeState();
