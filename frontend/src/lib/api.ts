@@ -40,6 +40,18 @@ function joinUrl(base: string, path: string): string {
   return `${left}${right}`;
 }
 
+function getAuthBaseUrl(): string {
+  return import.meta.env.VITE_AUTH_BASE_URL || getBaseUrl();
+}
+
+function getRequestUrl(path: string): string {
+  if (path === "/auth" || path.startsWith("/auth/")) {
+    return joinUrl(getAuthBaseUrl(), path);
+  }
+
+  return joinUrl(getBaseUrl(), path);
+}
+
 export function getToken(): string {
   return localStorage.getItem(tokenKey) || "";
 }
@@ -65,7 +77,7 @@ export async function ensureCSRFToken(): Promise<string> {
     return current;
   }
 
-  const res = await fetch(joinUrl(getBaseUrl(), "/auth/csrf"), {
+  const res = await fetch(getRequestUrl("/auth/csrf"), {
     method: "GET",
     credentials: "include",
   });
@@ -175,7 +187,7 @@ async function tryRefresh(): Promise<boolean> {
     }
   }
 
-  const res = await fetch(joinUrl(getBaseUrl(), "/auth/refresh"), {
+  const res = await fetch(getRequestUrl("/auth/refresh"), {
     method: "POST",
     headers: (() => {
       const headers = new Headers();
@@ -219,7 +231,7 @@ async function requestOnce<T>(
     init.body = JSON.stringify(opt.body);
   }
 
-  const res = await fetch(joinUrl(getBaseUrl(), path), init);
+  const res = await fetch(getRequestUrl(path), init);
 
   if (!res.ok) {
     await throwApiError(res);
